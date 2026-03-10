@@ -6,6 +6,7 @@ import 'pages/auth/login_page.dart';
 import 'pages/auth/signup_page.dart';
 import 'pages/auth/otp_page.dart';
 import 'pages/home/home_page.dart';
+import 'pages/home/splash_page.dart';
 import 'pages/home/dashboard_page.dart';
 import 'pages/navigation/navigation_page.dart';
 import 'pages/chat/chat_list_page.dart';
@@ -45,22 +46,28 @@ class CampusNavigator extends StatelessWidget {
       ),
 
       routes: {
-        '/': (context) => AuthPage(),
+        '/': (context) => const SplashPage(),
+        '/auth': (context) => const AuthPage(),
         '/login': (context) => LoginPage(),
         '/signup': (context) => SignupPage(),
         '/otp': (context) => OTPPage(),
-        '/home': (context) => HomePage(),
+        '/home': (context) => const HomePage(),
         '/dashboard': (context) => DashboardPage(),
-        '/navigator': (context) => NavigationPage(from: '', to: '',),
+        '/navigator': (context) => const NavigationPage(from: '', to: ''),
         '/chat_list': (context) => ChatListPage(),
-        '/chat_screen': (context) => ChatScreen(),
-        '/create_group': (context) => CreateGroupPage(),
-        '/calendar': (context) => CalendarPage(),
-        '/book_slot': (context) => BookSlotPage(),
-        '/ip_btp': (context) => IpBtpPage(),
-        '/apply_ip': (context) => ApplyIpPage(),
+        // Default demo chat screen (most real navigations use arguments)
+        '/chat_screen': (context) => const ChatScreen(
+              chatName: 'Campus Announcements',
+              currentUserEmail: 'demo@iiitd.ac.in',
+            ),
+        '/create_group': (context) => const CreateGroupPage(),
+        '/calendar': (context) => const CalendarPage(),
+        '/book_slot': (context) => const BookSlotPage(),
+        '/ip_btp': (context) => const IpBtpPage(),
+        '/apply_ip': (context) => const ApplyIpPage(),
         '/sports': (context) => SportsPage(),
-        '/book_court': (context) => BookCourtPage(),
+        // Default demo arena for direct route usage (real flow passes arenaName)
+        '/book_court': (context) => const BookCourtPage(arenaName: 'Basketball Court'),
         '/events': (context) => EventsPage(),
         '/seminars': (context) => SeminarsPage(),
       },
