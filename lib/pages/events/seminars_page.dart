@@ -1,40 +1,115 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-class SeminarsPage extends StatelessWidget {
-  SeminarsPage({super.key});
+class SeminarsPage extends StatefulWidget {
+  const SeminarsPage({super.key});
 
-  final List<_Seminar> seminars = [
-    _Seminar(
-      title: "Deep Learning for Vision",
-      speaker: "Prof. Sharma",
-      time: "22 March, 5:00 PM",
-      venue: "Room B-103",
-    ),
-    _Seminar(
-      title: "Quantum Computing 101",
-      speaker: "Dr. Mehta",
-      time: "25 March, 3:00 PM",
-      venue: "Seminar Hall",
-    ),
-  ];
+  @override
+  State<SeminarsPage> createState() => _SeminarsPageState();
+}
+
+class _SeminarsPageState extends State<SeminarsPage> {
+  final _supabase = Supabase.instance.client;
+  late Future<List<_Seminar>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _loadSeminars();
+  }
+
+  Future<List<_Seminar>> _loadSeminars() async {
+    final res = await _supabase
+        .from('seminars')
+        .select()
+        .order('date_time', ascending: true);
+
+    return (res as List)
+        .map((e) => _Seminar.fromMap(e as Map<String, dynamic>))
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Upcoming Seminars')),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: seminars.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (context, index) {
-          final s = seminars[index];
-          return Card(
-            child: ListTile(
-              title: Text(s.title),
-              subtitle: Text(
-                  "${s.speaker}\n${s.time}\n${s.venue}"),
-              isThreeLine: true,
-            ),
+      body: FutureBuilder<List<_Seminar>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Text(
+                "Failed to load seminars\n${snapshot.error}",
+                textAlign: TextAlign.center,
+              ),
+            );
+          }
+          final seminars = snapshot.data ?? [];
+          if (seminars.isEmpty) {
+            return const Center(
+              child: Text("No seminars found. Add rows in the 'seminars' table."),
+            );
+          }
+
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: seminars.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final s = seminars[index];
+              return Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s.title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        s.speaker,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.schedule, size: 14),
+                          const SizedBox(width: 4),
+                          Text(
+                            s.dateString,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          const SizedBox(width: 12),
+                          const Icon(Icons.place_outlined, size: 14),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              s.venue,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           );
         },
       ),
@@ -43,16 +118,31 @@ class SeminarsPage extends StatelessWidget {
 }
 
 class _Seminar {
+  final String id;
   final String title;
   final String speaker;
-  final String time;
+  final DateTime dateTime;
   final String venue;
 
   _Seminar({
+    required this.id,
     required this.title,
     required this.speaker,
-    required this.time,
+    required this.dateTime,
     required this.venue,
   });
+
+  String get dateString =>
+      "${dateTime.day}/${dateTime.month} • ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}";
+
+  factory _Seminar.fromMap(Map<String, dynamic> map) {
+    return _Seminar(
+      id: map['id'].toString(),
+      title: map['title'] as String,
+      speaker: (map['speaker'] ?? '') as String,
+      dateTime: DateTime.parse(map['date_time'] as String),
+      venue: (map['venue'] ?? '') as String,
+    );
+  }
 }
 

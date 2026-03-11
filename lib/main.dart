@@ -42,7 +42,18 @@ class CampusNavigator extends StatelessWidget {
       title: "Campus Navigator",
 
       theme: ThemeData(
-        primarySwatch: Colors.indigo,
+        brightness: Brightness.dark,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.indigo,
+          brightness: Brightness.dark,
+        ),
+        scaffoldBackgroundColor: const Color(0xFF020617),
+        fontFamily: 'SF Pro Text',
+        useMaterial3: true,
+        textTheme: ThemeData.dark().textTheme.apply(
+              bodyColor: Colors.white,
+              displayColor: Colors.white,
+            ),
       ),
 
       routes: {
@@ -57,8 +68,10 @@ class CampusNavigator extends StatelessWidget {
         '/chat_list': (context) => ChatListPage(),
         // Default demo chat screen (most real navigations use arguments)
         '/chat_screen': (context) => const ChatScreen(
+              chatId: 'demo',
               chatName: 'Campus Announcements',
               currentUserEmail: 'demo@iiitd.ac.in',
+              isGroup: true,
             ),
         '/create_group': (context) => const CreateGroupPage(),
         '/calendar': (context) => const CalendarPage(),

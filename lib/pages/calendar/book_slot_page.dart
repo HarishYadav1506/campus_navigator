@@ -11,6 +11,7 @@ class BookSlotPage extends StatefulWidget {
 class _BookSlotPageState extends State<BookSlotPage> {
   TimeOfDay? _from;
   TimeOfDay? _to;
+  bool _repeatDaily = true;
   final purposeController = TextEditingController();
 
   final List<_CalBooking> _bookings = [];
@@ -44,14 +45,22 @@ class _BookSlotPageState extends State<BookSlotPage> {
       to: _to!,
       purpose: purposeController.text,
       by: SessionManager.email ?? "demo@iiitd.ac.in",
+      repeatDaily: _repeatDaily,
     );
 
     setState(() {
       _bookings.add(booking);
     });
 
+    // Here you can integrate Google Calendar API by creating an event
+    // for [booking]. This requires OAuth credentials configured separately.
+
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Slot booked in calendar")),
+      SnackBar(
+        content: Text(
+          "Slot booked${_repeatDaily ? " (repeating daily)" : ""} in calendar",
+        ),
+      ),
     );
   }
 
@@ -81,7 +90,9 @@ class _BookSlotPageState extends State<BookSlotPage> {
                   child: OutlinedButton(
                     onPressed: () => _pickTime(true),
                     child: Text(
-                      _from == null ? "From time" : "From: ${_from!.format(context)}",
+                      _from == null
+                          ? "From time"
+                          : "From: ${_from!.format(context)}",
                     ),
                   ),
                 ),
@@ -90,13 +101,30 @@ class _BookSlotPageState extends State<BookSlotPage> {
                   child: OutlinedButton(
                     onPressed: () => _pickTime(false),
                     child: Text(
-                      _to == null ? "To time" : "To: ${_to!.format(context)}",
+                      _to == null
+                          ? "To time"
+                          : "To: ${_to!.format(context)}",
                     ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
+            Row(
+              children: [
+                Switch(
+                  value: _repeatDaily,
+                  onChanged: (v) {
+                    setState(() {
+                      _repeatDaily = v;
+                    });
+                  },
+                ),
+                const SizedBox(width: 4),
+                const Text("Repeat daily (office hours)"),
+              ],
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: purposeController,
               decoration: const InputDecoration(
@@ -130,8 +158,11 @@ class _BookSlotPageState extends State<BookSlotPage> {
                         final b = _bookings[index];
                         return ListTile(
                           leading: const Icon(Icons.schedule),
-                          title: Text("${b.from.format(context)} - ${b.to.format(context)}"),
-                          subtitle: Text("${b.purpose}\nBy: ${b.by}"),
+                          title: Text(
+                              "${b.from.format(context)} - ${b.to.format(context)}"),
+                          subtitle: Text(
+                            "${b.purpose}\nBy: ${b.by}${b.repeatDaily ? "\nRepeats daily" : ""}",
+                          ),
                           isThreeLine: true,
                         );
                       },
@@ -149,12 +180,14 @@ class _CalBooking {
   final TimeOfDay to;
   final String purpose;
   final String by;
+  final bool repeatDaily;
 
   _CalBooking({
     required this.from,
     required this.to,
     required this.purpose,
     required this.by,
+    required this.repeatDaily,
   });
 }
 

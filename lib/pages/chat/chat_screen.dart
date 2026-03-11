@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
 class ChatScreen extends StatefulWidget {
+  final String chatId;
   final String chatName;
   final String currentUserEmail;
+  final bool isGroup;
 
   const ChatScreen({
     super.key,
+    required this.chatId,
     required this.chatName,
     required this.currentUserEmail,
+    required this.isGroup,
   });
 
   @override
@@ -16,7 +20,11 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   final List<_Message> _messages = [];
+  bool _muted = false;
+  bool _pinned = false;
+  String _search = '';
 
   void _sendMessage() {
     if (_controller.text.trim().isEmpty) return;
@@ -35,22 +43,74 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _controller.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final filtered = _messages.where((m) {
+      if (_search.isEmpty) return true;
+      return m.text.toLowerCase().contains(_search.toLowerCase());
+    }).toList();
+
     return Scaffold(
-      appBar: AppBar(title: Text(widget.chatName)),
+      appBar: AppBar(
+        title: Row(
+          children: [
+            Text(widget.chatName),
+            if (widget.isGroup) const SizedBox(width: 6),
+            if (widget.isGroup)
+              const Icon(Icons.groups_2_outlined, size: 18),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(_muted ? Icons.notifications_off : Icons.notifications),
+            tooltip: _muted ? "Unmute" : "Mute chat",
+            onPressed: () {
+              setState(() {
+                _muted = !_muted;
+              });
+            },
+          ),
+          IconButton(
+            icon: Icon(_pinned ? Icons.push_pin : Icons.push_pin_outlined),
+            tooltip: "Pin chat",
+            onPressed: () {
+              setState(() {
+                _pinned = !_pinned;
+              });
+            },
+          ),
+        ],
+      ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+            child: TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                hintText: "Search messages in this chat",
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _search = value;
+                });
+              },
+            ),
+          ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(8),
               reverse: true,
-              itemCount: _messages.length,
+              itemCount: filtered.length,
               itemBuilder: (context, index) {
-                final msg = _messages[_messages.length - 1 - index];
+                final msg = filtered[filtered.length - 1 - index];
                 final isMe = msg.sender == widget.currentUserEmail;
                 return Align(
                   alignment:

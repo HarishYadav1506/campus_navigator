@@ -16,14 +16,23 @@ class _BookCourtPageState extends State<BookCourtPage> {
   final emailController = TextEditingController();
   final otpController = TextEditingController();
 
+  static final Map<String, DateTime> _blockedUntilByEmail = {};
+
   DateTime? _bookingCreatedAt;
   Timer? _timer;
+  bool _banSetForCurrentBooking = false;
 
   String get _status {
     if (_bookingCreatedAt == null) return "No active booking";
     final diff = DateTime.now().difference(_bookingCreatedAt!);
     if (diff.inMinutes >= 60) return "Slot finished";
     if (diff.inMinutes >= 10) {
+      // mark user as banned for 12 hours if not already done
+      if (!_banSetForCurrentBooking && emailController.text.isNotEmpty) {
+        _blockedUntilByEmail[emailController.text.trim()] =
+            DateTime.now().add(const Duration(hours: 12));
+        _banSetForCurrentBooking = true;
+      }
       return "Cancelled (did not reach in 10 mins)";
     }
     return "Active (reach arena within 10 mins)";
@@ -46,8 +55,22 @@ class _BookCourtPageState extends State<BookCourtPage> {
       return;
     }
 
+    final email = emailController.text.trim();
+    final blockedUntil = _blockedUntilByEmail[email];
+    if (blockedUntil != null && blockedUntil.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "You missed a previous booking. You can book again after ${blockedUntil.toLocal()}",
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _bookingCreatedAt = DateTime.now();
+      _banSetForCurrentBooking = false;
     });
     _startTimer();
 
@@ -127,7 +150,7 @@ class _BookCourtPageState extends State<BookCourtPage> {
               const SizedBox(height: 16),
               const Text(
                 "Rule: If you do not reach the arena within 10 minutes of booking, "
-                "the slot is considered cancelled and you can book again for the next 1 hour.",
+                "the slot is considered cancelled and you cannot book again for the next 12 hours.",
                 style: TextStyle(fontSize: 12),
               ),
             ],

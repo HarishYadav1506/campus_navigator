@@ -15,7 +15,16 @@ class AuthPage extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-
+              // Branded logo on auth screen
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.asset(
+                  "assets/logo.jpg",
+                  height: 80,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(height: 20),
               const Text(
                 "Campus Navigator",
                 style: TextStyle(

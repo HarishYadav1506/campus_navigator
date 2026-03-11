@@ -17,7 +17,7 @@ class SplashPage extends StatelessWidget {
             Container(
               decoration: const BoxDecoration(
                 image: DecorationImage(
-                  image: AssetImage("assets/images/old_academic.jpg"),
+                  image: AssetImage("assets/old_academic.jpg"),
                   fit: BoxFit.cover,
                 ),
               ),
@@ -34,7 +34,7 @@ class SplashPage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Image.asset(
-                    "assets/images/logo.jpg",
+                    "assets/logo.jpg",
                     height: 130,
                   ),
                   const SizedBox(height: 24),
