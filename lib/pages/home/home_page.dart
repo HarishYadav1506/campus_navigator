@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../../core/session_manager.dart';
+import '../navigation/street_view_page.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -174,14 +176,15 @@ class HomePage extends StatelessWidget {
                         ),
                         const SizedBox(width: 10),
                         InkWell(
-                          onTap: () {
-                            // You can later open a real 360 view URL here.
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("360° Street View coming soon"),
-                              ),
-                            );
-                          },
+                          onTap: () async {
+  final Uri url = Uri.parse(
+    "https://last5sec.github.io/campus-navigation/streetview/index.html",
+  );
+
+  if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+    throw Exception('Could not launch $url');
+  }
+},
                           borderRadius: BorderRadius.circular(999),
                           child: Container(
                             padding: const EdgeInsets.all(10),

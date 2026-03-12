@@ -20,6 +20,7 @@ import 'pages/sports/sports_page.dart';
 import 'pages/sports/book_court_page.dart';
 import 'pages/events/events_page.dart';
 import 'pages/events/seminars_page.dart';
+import 'pages/navigation/street_view_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -83,6 +84,7 @@ class CampusNavigator extends StatelessWidget {
         '/book_court': (context) => const BookCourtPage(arenaName: 'Basketball Court'),
         '/events': (context) => EventsPage(),
         '/seminars': (context) => SeminarsPage(),
+        '/streetview': (context) => const StreetViewPage(),
       },
 
       onGenerateRoute: (settings) {
