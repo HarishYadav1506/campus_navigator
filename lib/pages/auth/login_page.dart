@@ -15,7 +15,7 @@ class _LoginPageState extends State<LoginPage> {
 
   final supabase = Supabase.instance.client;
   bool _loading = false;
-  String? _role; // student / prof / admin
+  String? _role; // student / professor
 
   Future<void> login() async {
     if (email.text.isEmpty || password.text.isEmpty) {
@@ -61,28 +61,9 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      // 2. Determine role from prof/admin tables based on email
-      String role = 'student';
-
-      final adminRes = await supabase
-          .from('admin')
-          .select('email')
-          .eq('email', email.text)
-          .maybeSingle();
-
-      if (adminRes != null) {
-        role = 'admin';
-      } else {
-        final profRes = await supabase
-            .from('prof')
-            .select('email')
-            .eq('email', email.text)
-            .maybeSingle();
-
-        if (profRes != null) {
-          role = 'prof';
-        }
-      }
+      // 2. Read role directly from the "users" table.
+      //    It is set at signup time by checking "professors_login".
+      String role = (userRes['role'] as String?) ?? 'student';
 
       SessionManager.setUser(newEmail: email.text, newRole: role);
       setState(() {

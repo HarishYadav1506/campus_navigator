@@ -14,7 +14,9 @@ class _SignupPageState extends State<SignupPage> {
   bool _loading = false;
 
   Future<void> signup() async {
-    if (!email.text.endsWith("@iiitd.ac.in")) {
+    final trimmedEmail = email.text.trim().toLowerCase();
+
+    if (!trimmedEmail.endsWith("@iiitd.ac.in")) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Use IIITD Email")),
       );
@@ -27,14 +29,14 @@ class _SignupPageState extends State<SignupPage> {
 
     try {
       await supabase.auth.signInWithOtp(
-        email: email.text,
+        email: trimmedEmail,
       );
 
       if (!mounted) return;
       Navigator.pushNamed(
         context,
         '/otp',
-        arguments: email.text,
+        arguments: trimmedEmail,
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

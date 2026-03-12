@@ -42,10 +42,22 @@ class _OTPPageState extends State<OTPPage> {
         type: OtpType.email,
       );
 
-      // 2. Store user details in your "users" table
+      // 2. Determine whether this email belongs to a professor or a student
+      //    by checking the "professors_login" table (list of all professors) first.
+      final professor = await supabase
+          .from('professors_login')
+          .select('email')
+          .eq('email', email)
+          .maybeSingle();
+
+      final role = professor != null ? 'professor' : 'student';
+
+      // 3. Store user details in your "users" table.
+      //    Make sure your "users" table has at least: email (text), password (text), role (text).
       await supabase.from('users').insert({
         'email': email,
-        'password': password.text, // consider hashing later
+        'password': password.text,
+        'role': role,
       });
 
       if (!mounted) return;
