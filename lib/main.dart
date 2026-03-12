@@ -27,7 +27,7 @@ Future<void> main() async {
 
   await Supabase.initialize(
     url: "https://doeqgarryoxbyknlqbzg.supabase.co",
-    anonKey: "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvZXFnYXJyeW94YnlrbmxxYnpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzY0NDQsImV4cCI6MjA4ODIxMjQ0NH0",
+    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvZXFnYXJyeW94YnlrbmxxYnpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzY0NDQsImV4cCI6MjA4ODIxMjQ0NH0.BQRlIWx1JKUwAhBnH5djHLLQfe5XxBwjWIwcapYscig",
   );
 
   runApp(const CampusNavigator());
@@ -60,9 +60,10 @@ class CampusNavigator extends StatelessWidget {
       routes: {
         '/': (context) => const SplashPage(),
         '/auth': (context) => const AuthPage(),
-        '/login': (context) => LoginPage(),
-        '/signup': (context) => SignupPage(),
-        '/otp': (context) => OTPPage(),
+        '/login': (context) => const LoginPage(),
+        '/signup': (context) => const SignupPage(),
+        // OTP page reads email from route arguments internally
+        '/otp': (context) => const OTPPage(),
         '/home': (context) => const HomePage(),
         '/dashboard': (context) => DashboardPage(),
         '/navigator': (context) => const NavigationPage(from: '', to: ''),

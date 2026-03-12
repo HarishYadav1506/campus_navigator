@@ -175,41 +175,57 @@ class HomePage extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        InkWell(
-                          onTap: () async {
-  final Uri url = Uri.parse(
-    "https://last5sec.github.io/campus-navigation/streetview/index.html",
-  );
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            InkWell(
+                              onTap: () async {
+                                final Uri url = Uri.parse(
+                                  "https://last5sec.github.io/campus-navigation/streetview/index.html",
+                                );
 
-  if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-    throw Exception('Could not launch $url');
-  }
-},
-                          borderRadius: BorderRadius.circular(999),
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [
-                                  Color(0xFF4F46E5),
-                                  Color(0xFF06B6D4),
-                                ],
-                              ),
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.4),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4),
+                                if (!await launchUrl(
+                                  url,
+                                  mode: LaunchMode.externalApplication,
+                                )) {
+                                  throw Exception('Could not launch $url');
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(999),
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF4F46E5),
+                                      Color(0xFF06B6D4),
+                                    ],
+                                  ),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.4),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                                child: const Icon(
+                                  Icons.threed_rotation,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.threed_rotation,
-                              color: Colors.white,
-                              size: 22,
+                            const SizedBox(height: 4),
+                            const Text(
+                              "360° website",
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 10,
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
@@ -334,103 +350,115 @@ class HomePage extends StatelessWidget {
             ),
           ),
 
-          /// Bottom feature panel: quick access to main features
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: TweenAnimationBuilder<double>(
-              duration: const Duration(milliseconds: 900),
-              curve: Curves.easeOutBack,
-              tween: Tween(begin: 0, end: 1),
-              builder: (context, value, child) {
-                return Transform.translate(
-                  offset: Offset(0, (1 - value) * 40),
-                  child: Opacity(opacity: value, child: child),
-                );
-              },
-              child: Container(
-                height: 180,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(24),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 16,
-                      offset: Offset(0, -8),
+          /// Draggable bottom sheet: quick access to main features
+          DraggableScrollableSheet(
+            initialChildSize: 0.24,
+            minChildSize: 0.22,
+            maxChildSize: 0.55,
+            builder: (context, scrollController) {
+              return TweenAnimationBuilder<double>(
+                duration: const Duration(milliseconds: 900),
+                curve: Curves.easeOutBack,
+                tween: Tween(begin: 0, end: 1),
+                builder: (context, value, child) {
+                  return Transform.translate(
+                    offset: Offset(0, (1 - value) * 40),
+                    child: Opacity(opacity: value, child: child),
+                  );
+                },
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(24),
                     ),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[300],
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      const Text(
-                        "Explore campus services",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _ActionTile(
-                            icon: Icons.sports_soccer_outlined,
-                            label: "Sports",
-                            onTap: () {
-                              Navigator.pushNamed(context, '/sports');
-                            },
-                          ),
-                          _ActionTile(
-                            icon: Icons.school_outlined,
-                            label: "IP/BTP",
-                            onTap: () {
-                              Navigator.pushNamed(context, '/ip_btp');
-                            },
-                          ),
-                          _ActionTile(
-                            icon: Icons.calendar_today_outlined,
-                            label: "Calendar",
-                            onTap: () {
-                              Navigator.pushNamed(context, '/calendar');
-                            },
-                          ),
-                          _ActionTile(
-                            icon: Icons.chat_bubble_outline,
-                            label: "Chat",
-                            onTap: () {
-                              Navigator.pushNamed(context, '/chat_list');
-                            },
-                          ),
-                          _ActionTile(
-                            icon: Icons.event_note_outlined,
-                            label: "Events",
-                            onTap: () {
-                              Navigator.pushNamed(context, '/events');
-                            },
-                          ),
-                        ],
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 16,
+                        offset: Offset(0, -8),
                       ),
                     ],
                   ),
+                  child: SingleChildScrollView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[300],
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        const Text(
+                          "Explore campus services",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _ActionTile(
+                              icon: Icons.sports_soccer_outlined,
+                              label: "Sports",
+                              onTap: () {
+                                Navigator.pushNamed(context, '/sports');
+                              },
+                            ),
+                            _ActionTile(
+                              icon: Icons.school_outlined,
+                              label: "IP/BTP",
+                              onTap: () {
+                                Navigator.pushNamed(context, '/ip_btp');
+                              },
+                            ),
+                            _ActionTile(
+                              icon: Icons.calendar_today_outlined,
+                              label: "Calendar",
+                              onTap: () {
+                                Navigator.pushNamed(context, '/calendar');
+                              },
+                            ),
+                            _ActionTile(
+                              icon: Icons.chat_bubble_outline,
+                              label: "Chat",
+                              onTap: () {
+                                Navigator.pushNamed(context, '/chat_list');
+                              },
+                            ),
+                            _ActionTile(
+                              icon: Icons.event_note_outlined,
+                              label: "Events",
+                              onTap: () {
+                                Navigator.pushNamed(context, '/events');
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          "Tip: drag this panel up to see all services with their names.",
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ],
       ),

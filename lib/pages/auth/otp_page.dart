@@ -42,8 +42,8 @@ class _OTPPageState extends State<OTPPage> {
         type: OtpType.email,
       );
 
-      // 2. Store user details in your custom "user" table
-      await supabase.from('user').insert({
+      // 2. Store user details in your "users" table
+      await supabase.from('users').insert({
         'email': email,
         'password': password.text, // consider hashing later
       });

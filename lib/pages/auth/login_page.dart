@@ -46,9 +46,9 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      // 1. Check user credentials in "user" table
+      // 1. Check user credentials in "users" table
       final userRes = await supabase
-          .from('user')
+          .from('users')
           .select()
           .eq('email', email.text)
           .eq('password', password.text)
