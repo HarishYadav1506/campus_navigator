@@ -11,8 +11,7 @@ class AuthPage extends StatelessWidget {
     return Scaffold(
       body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(30),
-          child: Column(
+          padding: const EdgeInsets.all(30),          child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // Branded logo on auth screen

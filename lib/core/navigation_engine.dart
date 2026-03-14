@@ -1,61 +1,108 @@
+import 'dart:collection';
+import 'package:flutter/foundation.dart';
+import 'supabase_service.dart';
+
 class CampusGraph {
-  // Simple unweighted graph: each node connects to its neighbours.
-  // You can edit / extend this list to match your real campus.
-  static final Map<String, List<String>> _adjacency = {
-    'main gate': ['admin block', 'hostel gate'],
-    'admin block': ['main gate', 'cse block', 'library'],
-    'hostel gate': ['main gate', 'hostel a', 'hostel b'],
-    'hostel a': ['hostel gate', 'hostel b'],
-    'hostel b': ['hostel gate', 'hostel a'],
-    'cse block': ['admin block', 'old academic block'],
-    'old academic block': ['cse block', 'library'],
-    'library': ['admin block', 'old academic block', 'ground'],
-    'ground': ['library', 'sports complex'],
-    'sports complex': ['ground'],
-  };
 
-  static Iterable<String> get allNodes => _adjacency.keys;
+  static Map<int, List<int>> graph = {};
+  static Map<String, int> placeToNode = {};
+  static Map<String, String> _keyToCanonicalName = {};
+  static Map<int, String> nodeToImage = {};
 
-  /// Returns a shortest path (by number of edges) between [from] and [to],
-  /// or null if either node does not exist or no path is found.
-  static List<String>? shortestPath(String from, String to) {
-    final start = _normalize(from);
-    final goal = _normalize(to);
-
-    if (!_adjacency.containsKey(start) || !_adjacency.containsKey(goal)) {
-      return null;
-    }
-
-    if (start == goal) return [start];
-
-    final queue = <String>[start];
-    final visited = <String>{start};
-    final parent = <String, String?>{start: null};
-
-    while (queue.isNotEmpty) {
-      final current = queue.removeAt(0);
-      final neighbours = _adjacency[current] ?? [];
-
-      for (final n in neighbours) {
-        if (visited.contains(n)) continue;
-        visited.add(n);
-        parent[n] = current;
-        if (n == goal) {
-          // Reconstruct path
-          final path = <String>[];
-          String? node = goal;
-          while (node != null) {
-            path.insert(0, node);
-            node = parent[node];
-          }
-          return path;
-        }
-        queue.add(n);
-      }
-    }
+  static int? _toInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v);
     return null;
   }
 
-  static String _normalize(String name) => name.trim().toLowerCase();
-}
+  static Future<void> loadGraph() async {
 
+    graph = {};
+    placeToNode = {};
+    _keyToCanonicalName = {};
+    nodeToImage = {};
+
+    final places = await SupabaseService.getPlaces();
+    final nodes = await SupabaseService.getNodes();
+    final edges = await SupabaseService.getEdges();
+
+    // place → node (case-insensitive: store lowercase key, keep canonical name for display)
+    for (var p in places) {
+      final name = (p['place_name']?.toString() ?? '').trim();
+      final node = _toInt(p['node']);
+      if (name.isNotEmpty && node != null) {
+        final key = name.toLowerCase();
+        placeToNode[key] = node;
+        _keyToCanonicalName[key] = name;
+      }
+    }
+
+    // node → image
+    for (var n in nodes) {
+      final node = _toInt(n['node']);
+      final image = (n['image']?.toString() ?? '').trim();
+      if (node != null) {
+        nodeToImage[node] = image;
+      }
+    }
+
+    // edges → graph
+    for (var e in edges) {
+      final from = _toInt(e['node_from']);
+      final to = _toInt(e['node_to']);
+      if (from == null || to == null) continue;
+
+      graph.putIfAbsent(from, () => []).add(to);
+    }
+
+    debugPrint(
+      '[CampusGraph] loaded places=${places.length} nodes=${nodes.length} edges=${edges.length} '
+      'mappedPlaces=${placeToNode.length} mappedNodes=${nodeToImage.length} graphNodes=${graph.length}',
+    );
+  }
+
+  static List<int>? shortestPath(String from, String to) {
+    final fromKey = from.trim().toLowerCase();
+    final toKey = to.trim().toLowerCase();
+    final start = placeToNode[fromKey];
+    final end = placeToNode[toKey];
+
+    if (start == null || end == null) return null;
+
+    Queue<List<int>> queue = Queue();
+    Set<int> visited = {};
+
+    queue.add([start]);
+    visited.add(start);
+
+    while (queue.isNotEmpty) {
+      final path = queue.removeFirst();
+      final node = path.last;
+
+      if (node == end) return path;
+
+      for (var next in graph[node] ?? []) {
+        if (!visited.contains(next)) {
+          visited.add(next);
+          queue.add([...path, next]);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  static String getImage(int node) {
+    return nodeToImage[node] ?? '';
+  }
+
+  /// Canonical place name for display (e.g. "library" → "Library").
+  static String getCanonicalPlaceName(String input) {
+    final key = input.trim().toLowerCase();
+    return _keyToCanonicalName[key] ?? input;
+  }
+
+  static List<String> get allNodes => _keyToCanonicalName.values.toList();
+}

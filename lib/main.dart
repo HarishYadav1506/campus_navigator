@@ -20,6 +20,7 @@ import 'pages/sports/sports_page.dart';
 import 'pages/sports/book_court_page.dart';
 import 'pages/events/events_page.dart';
 import 'pages/events/seminars_page.dart';
+import 'core/navigation_engine.dart';
 import 'pages/navigation/street_view_page.dart';
 
 Future<void> main() async {
@@ -29,7 +30,7 @@ Future<void> main() async {
     url: "https://doeqgarryoxbyknlqbzg.supabase.co",
     anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvZXFnYXJyeW94YnlrbmxxYnpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzY0NDQsImV4cCI6MjA4ODIxMjQ0NH0.BQRlIWx1JKUwAhBnH5djHLLQfe5XxBwjWIwcapYscig",
   );
-
+  await CampusGraph.loadGraph();
   runApp(const CampusNavigator());
 }
 
@@ -66,7 +67,6 @@ class CampusNavigator extends StatelessWidget {
         '/otp': (context) => const OTPPage(),
         '/home': (context) => const HomePage(),
         '/dashboard': (context) => DashboardPage(),
-        '/navigator': (context) => const NavigationPage(from: '', to: ''),
         '/chat_list': (context) => ChatListPage(),
         // Default demo chat screen (most real navigations use arguments)
         '/chat_screen': (context) => const ChatScreen(
@@ -90,12 +90,12 @@ class CampusNavigator extends StatelessWidget {
 
       onGenerateRoute: (settings) {
         if (settings.name == '/navigator') {
-          final args = settings.arguments as Map;
+          final args = (settings.arguments as Map?) ?? const {};
 
           return MaterialPageRoute(
             builder: (context) => NavigationPage(
-              from: args['from'],
-              to: args['to'],
+              from: (args['from'] ?? '') as String,
+              to: (args['to'] ?? '') as String,
             ),
           );
         }

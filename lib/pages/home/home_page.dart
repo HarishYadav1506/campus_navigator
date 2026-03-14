@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../../core/session_manager.dart';
+import '../../core/navigation_engine.dart';
 import '../navigation/street_view_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -565,28 +566,64 @@ class _FromToDialog extends StatefulWidget {
 }
 
 class _FromToDialogState extends State<_FromToDialog> {
+  String? fromValue;
+  String? toValue;
   final fromController = TextEditingController();
   final toController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
+    final locations = [...CampusGraph.allNodes]..sort();
+
     return AlertDialog(
       title: const Text("Navigate on campus"),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          DropdownButtonFormField<String>(
+            value: fromValue,
+            items: locations
+                .map(
+                  (name) => DropdownMenuItem<String>(
+                    value: name,
+                    child: Text(name),
+                  ),
+                )
+                .toList(),
+            onChanged: (v) => setState(() => fromValue = v),
+            decoration: const InputDecoration(
+              labelText: "From",
+            ),
+          ),
+          const SizedBox(height: 8),
           TextField(
             controller: fromController,
             decoration: const InputDecoration(
-              labelText: "From",
+              labelText: "From (type manually)",
               hintText: "e.g. Hostel, Gate, Block A",
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            value: toValue,
+            items: locations
+                .map(
+                  (name) => DropdownMenuItem<String>(
+                    value: name,
+                    child: Text(name),
+                  ),
+                )
+                .toList(),
+            onChanged: (v) => setState(() => toValue = v),
+            decoration: const InputDecoration(
+              labelText: "To",
+            ),
+          ),
+          const SizedBox(height: 8),
           TextField(
             controller: toController,
             decoration: const InputDecoration(
-              labelText: "To",
+              labelText: "To (type manually)",
               hintText: "e.g. Library, CSE Dept, Ground",
             ),
           ),
@@ -599,9 +636,12 @@ class _FromToDialogState extends State<_FromToDialog> {
         ),
         ElevatedButton(
           onPressed: () {
+            final from = (fromValue ?? fromController.text).trim();
+            final to = (toValue ?? toController.text).trim();
+            if (from.isEmpty || to.isEmpty) return;
             Navigator.pop<Map<String, String>>(context, {
-              'from': fromController.text.trim(),
-              'to': toController.text.trim(),
+              'from': from,
+              'to': to,
             });
           },
           child: const Text("Navigate"),
