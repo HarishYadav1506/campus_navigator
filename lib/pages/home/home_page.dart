@@ -2,7 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../../core/session_manager.dart';
-import '../navigation/street_view_page.dart';
+import '../../widgets/campus_essentials_strip.dart';
+import '../../widgets/notification_icon_button.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class HomePage extends StatelessWidget {
@@ -77,41 +78,46 @@ class HomePage extends StatelessWidget {
                       ),
                     ],
                   ),
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
-                        side: const BorderSide(
-                          color: Colors.white24,
+                  Row(
+                    children: [
+                      const NotificationIconButton(),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(999),
+                            side: const BorderSide(
+                              color: Colors.white24,
+                            ),
+                          ),
+                          backgroundColor: Colors.white.withOpacity(0.06),
+                        ),
+                        onPressed: () {
+                          if (SessionManager.isLoggedIn) {
+                            Navigator.pushNamed(context, '/settings');
+                          } else {
+                            Navigator.pushNamed(context, "/auth");
+                          }
+                        },
+                        icon: const Icon(
+                          Icons.person_outline,
+                          size: 18,
+                        ),
+                        label: Text(
+                          SessionManager.isLoggedIn
+                              ? (SessionManager.role ?? "Profile")
+                              : "Sign / Login",
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                      backgroundColor: Colors.white.withOpacity(0.06),
-                    ),
-                    onPressed: () {
-                      if (SessionManager.isLoggedIn) {
-                        Navigator.pushNamed(context, "/dashboard");
-                      } else {
-                        Navigator.pushNamed(context, "/auth");
-                      }
-                    },
-                    icon: const Icon(
-                      Icons.person_outline,
-                      size: 18,
-                    ),
-                    label: Text(
-                      SessionManager.isLoggedIn
-                          ? (SessionManager.role ?? "Profile")
-                          : "Sign / Login",
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -128,10 +134,12 @@ class HomePage extends StatelessWidget {
                 curve: Curves.easeOutCubic,
                 tween: Tween(begin: 0, end: 1),
                 builder: (context, value, child) {
+                  // Curves like easeOutBack can overshoot; Opacity requires 0..1.
+                  final o = value.clamp(0.0, 1.0);
                   return Opacity(
-                    opacity: value,
+                    opacity: o,
                     child: Transform.translate(
-                      offset: Offset(0, (1 - value) * 20),
+                      offset: Offset(0, (1 - o) * 20),
                       child: child,
                     ),
                   );
@@ -342,8 +350,18 @@ class HomePage extends StatelessWidget {
                             Navigator.pushNamed(context, '/ip_btp');
                           },
                         ),
+                        const SizedBox(width: 8),
+                        _QuickChip(
+                          icon: Icons.health_and_safety_outlined,
+                          label: "Safety",
+                          onTap: () {
+                            Navigator.pushNamed(context, '/campus_support');
+                          },
+                        ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    const CampusEssentialsStrip(),
                   ],
                 ),
               ),
@@ -361,9 +379,11 @@ class HomePage extends StatelessWidget {
                 curve: Curves.easeOutBack,
                 tween: Tween(begin: 0, end: 1),
                 builder: (context, value, child) {
+                  // easeOutBack overshoots past 1.0; Opacity must stay in [0, 1].
+                  final o = value.clamp(0.0, 1.0);
                   return Transform.translate(
-                    offset: Offset(0, (1 - value) * 40),
-                    child: Opacity(opacity: value, child: child),
+                    offset: Offset(0, (1 - o) * 40),
+                    child: Opacity(opacity: o, child: child),
                   );
                 },
                 child: Container(
@@ -405,8 +425,9 @@ class HomePage extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
                           children: [
                             _ActionTile(
                               icon: Icons.sports_soccer_outlined,
@@ -443,15 +464,52 @@ class HomePage extends StatelessWidget {
                                 Navigator.pushNamed(context, '/events');
                               },
                             ),
+                            _ActionTile(
+                              icon: Icons.health_and_safety_outlined,
+                              label: "Support",
+                              onTap: () {
+                                Navigator.pushNamed(context, '/campus_support');
+                              },
+                            ),
                           ],
                         ),
                         const SizedBox(height: 16),
+                        const Divider(height: 1),
+                        const SizedBox(height: 10),
                         const Text(
-                          "Tip: drag this panel up to see all services with their names.",
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.black54,
-                          ),
+                          "Top 5 features",
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 8),
+                        _ServiceRow(
+                          icon: Icons.sports_soccer_outlined,
+                          title: "Sports Booking",
+                          subtitle: "Live status, waitlist, admin approval",
+                          onTap: () => Navigator.pushNamed(context, '/sports'),
+                        ),
+                        _ServiceRow(
+                          icon: Icons.event_note_outlined,
+                          title: "Events & Seminars",
+                          subtitle: "Realtime updates and interest tracking",
+                          onTap: () => Navigator.pushNamed(context, '/events'),
+                        ),
+                        _ServiceRow(
+                          icon: Icons.chat_bubble_outline,
+                          title: "Office Hour Chat",
+                          subtitle: "Students can send doubts only in office hours",
+                          onTap: () => Navigator.pushNamed(context, '/chat_list'),
+                        ),
+                        _ServiceRow(
+                          icon: Icons.schedule_outlined,
+                          title: "Professor Slots",
+                          subtitle: "Search prof and book available slots",
+                          onTap: () => Navigator.pushNamed(context, '/prof_slots'),
+                        ),
+                        _ServiceRow(
+                          icon: Icons.health_and_safety_outlined,
+                          title: "Safety & Support",
+                          subtitle: "Emergency, medical and issue reporting",
+                          onTap: () => Navigator.pushNamed(context, '/campus_support'),
                         ),
                       ],
                     ),
@@ -552,6 +610,58 @@ class _ActionTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ServiceRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ServiceRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.035),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.black.withOpacity(0.06)),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: Colors.indigo.shade600),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      Text(subtitle, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Colors.black45),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

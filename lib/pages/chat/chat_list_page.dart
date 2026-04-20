@@ -39,7 +39,7 @@ class _ChatListPageState extends State<ChatListPage> {
 
     final rooms = await _supabase
         .from('chat_rooms')
-        .select('id,name,is_group,type,chat_room_members!inner(user_id)')
+        .select('id,name,is_group,type,office_hours_start,office_hours_end,chat_room_members!inner(user_id)')
         .eq('chat_room_members.user_id', userId);
 
     final list = (rooms as List)
@@ -80,7 +80,7 @@ class _ChatListPageState extends State<ChatListPage> {
       appBar: AppBar(
         title: const Text('Chats'),
         actions: [
-          if (role == 'prof')
+          if (role == 'prof' || role == 'professor')
             IconButton(
               icon: const Icon(Icons.group_add),
               onPressed: () async {
@@ -162,6 +162,9 @@ class _ChatListPageState extends State<ChatListPage> {
                                 chatName: chat.name,
                                 currentUserEmail: email,
                                 isGroup: chat.isGroup,
+                                chatType: chat.type,
+                                officeHoursStart: chat.officeHoursStart,
+                                officeHoursEnd: chat.officeHoursEnd,
                               ),
                             ),
                           );
@@ -199,6 +202,8 @@ class _ChatItem {
   final bool isGroup;
   final String type; // normal, office_hours
   final bool isPinned;
+  final DateTime? officeHoursStart;
+  final DateTime? officeHoursEnd;
 
   _ChatItem({
     required this.id,
@@ -206,6 +211,8 @@ class _ChatItem {
     required this.isGroup,
     required this.type,
     this.isPinned = false,
+    this.officeHoursStart,
+    this.officeHoursEnd,
   });
 
   factory _ChatItem.fromMap(Map<String, dynamic> map) {
@@ -215,6 +222,12 @@ class _ChatItem {
       isGroup: (map['is_group'] ?? true) as bool,
       type: (map['type'] ?? 'normal') as String,
       isPinned: (map['is_pinned'] ?? false) as bool,
+      officeHoursStart: map['office_hours_start'] == null
+          ? null
+          : DateTime.tryParse(map['office_hours_start'].toString()),
+      officeHoursEnd: map['office_hours_end'] == null
+          ? null
+          : DateTime.tryParse(map['office_hours_end'].toString()),
     );
   }
 }

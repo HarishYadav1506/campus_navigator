@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/supabase_quota_support.dart';
+
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
 
@@ -28,6 +30,11 @@ class _SignupPageState extends State<SignupPage> {
     });
 
     try {
+      // Same API for Magic Link and email OTP. Which email you get is decided in the
+      // Supabase Dashboard → Authentication → Email Templates → "Magic Link":
+      // - Include `{{ .Token }}` to send a 6-digit code (OTP).
+      // - If the template only uses `{{ .ConfirmationURL }}`, users get a link, not a code.
+      // Do not set [emailRedirectTo] here unless you need deep links for magic links.
       await supabase.auth.signInWithOtp(
         email: trimmedEmail,
       );
@@ -39,9 +46,14 @@ class _SignupPageState extends State<SignupPage> {
         arguments: trimmedEmail,
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to send OTP: $e")),
-      );
+      if (!mounted) return;
+      if (isSupabaseProjectRestrictedError(e)) {
+        showSupabaseRestrictedSnackBar(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send OTP: $e')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -54,7 +66,17 @@ class _SignupPageState extends State<SignupPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Signup")),
+      appBar: AppBar(
+        title: const Text("Signup"),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/home',
+            (_) => false,
+          ),
+        ),
+      ),
       body: Center(
         child: SizedBox(
           width: 350,

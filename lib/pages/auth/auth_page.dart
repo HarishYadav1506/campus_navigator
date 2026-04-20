@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'signup_page.dart';
 import 'login_page.dart';
-import '../../core/session_manager.dart';
 
 class AuthPage extends StatelessWidget {
   const AuthPage({super.key});
@@ -66,21 +65,10 @@ class AuthPage extends StatelessWidget {
                   child: const Text("Sign Up"),
                 ),
               ),
-              const SizedBox(height: 20),
-
-              // Guest mode: direct entry as demo student
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () {
-                    SessionManager.setUser(
-                      newEmail: 'guest@iiitd.ac.in',
-                      newRole: 'student',
-                    );
-                    Navigator.pushReplacementNamed(context, '/home');
-                  },
-                  child: const Text("Continue as Guest (student)"),
-                ),
+              const SizedBox(height: 8),
+              const Text(
+                "Use your college account to continue.",
+                style: TextStyle(color: Colors.white70, fontSize: 12),
               ),
             ],
           ),

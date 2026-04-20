@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -18,17 +19,38 @@ import 'pages/ip_btp/ip_btp_page.dart';
 import 'pages/ip_btp/apply_ip_page.dart';
 import 'pages/sports/sports_page.dart';
 import 'pages/sports/book_court_page.dart';
+import 'pages/sports/sports_status_page.dart';
 import 'pages/events/events_page.dart';
 import 'pages/events/seminars_page.dart';
 import 'pages/navigation/street_view_page.dart';
+import 'pages/notifications/notifications_page.dart';
+import 'pages/campus/campus_support_page.dart';
+import 'pages/admin/admin_dashboard.dart';
+import 'pages/admin/manage_events.dart';
+import 'pages/admin/manage_professors.dart';
+import 'pages/admin/manage_sports.dart';
+import 'pages/admin/manage_announcements_page.dart';
+import 'pages/admin/manage_approvals_page.dart';
+import 'pages/admin/student_activity_page.dart';
+import 'pages/admin/feedback_admin_page.dart';
+import 'pages/admin/tpo_admin_page.dart';
+import 'pages/ip_btp/prof_slots_page.dart';
+import 'pages/settings/settings_page.dart';
+import 'pages/tpo/tpo_page.dart';
+import 'pages/feedback/feedback_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
-    url: "https://doeqgarryoxbyknlqbzg.supabase.co",
-    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvZXFnYXJyeW94YnlrbmxxYnpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MzY0NDQsImV4cCI6MjA4ODIxMjQ0NH0.BQRlIWx1JKUwAhBnH5djHLLQfe5XxBwjWIwcapYscig",
+    url: "https://vhitzhcepylbwwrcylre.supabase.co",
+    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZoaXR6aGNlcHlsYnd3cmN5bHJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MTk1OTgsImV4cCI6MjA5MjE5NTU5OH0.ZeY98dYpnUbx9k6WvLRFby_1N_N6aqRYRDye4ixA1WI",
   );
+
+  // `SupabaseClient` has no `supabaseUrl` getter in this SDK; REST URL is the same host.
+  if (kDebugMode) {
+    debugPrint('Supabase REST URL: ${Supabase.instance.client.rest.url}');
+  }
 
   runApp(const CampusNavigator());
 }
@@ -66,6 +88,16 @@ class CampusNavigator extends StatelessWidget {
         '/otp': (context) => const OTPPage(),
         '/home': (context) => const HomePage(),
         '/dashboard': (context) => DashboardPage(),
+        '/settings': (context) => const SettingsPage(),
+        '/admin': (context) => AdminDashboard(),
+        '/admin_events': (context) => ManageEvents(),
+        '/admin_professors': (context) => ManageProfessors(),
+        '/admin_sports': (context) => ManageSports(),
+        '/admin_announcements': (context) => const ManageAnnouncementsPage(),
+        '/admin_approvals': (context) => const ManageApprovalsPage(),
+        '/admin_activity': (context) => const StudentActivityPage(),
+        '/admin_feedback': (context) => const FeedbackAdminPage(),
+        '/admin_tpo': (context) => const TpoAdminPage(),
         '/navigator': (context) => const NavigationPage(from: '', to: ''),
         '/chat_list': (context) => ChatListPage(),
         // Default demo chat screen (most real navigations use arguments)
@@ -79,10 +111,16 @@ class CampusNavigator extends StatelessWidget {
         '/calendar': (context) => const CalendarPage(),
         '/book_slot': (context) => const BookSlotPage(),
         '/ip_btp': (context) => const IpBtpPage(),
+        '/prof_slots': (context) => const ProfSlotsPage(),
         '/apply_ip': (context) => const ApplyIpPage(),
         '/sports': (context) => SportsPage(),
+        '/tpo': (context) => const TpoPage(),
+        '/feedback': (context) => const FeedbackPage(),
+        '/notifications': (context) => const NotificationsPage(),
+        '/campus_support': (context) => const CampusSupportPage(),
         // Default demo arena for direct route usage (real flow passes arenaName)
         '/book_court': (context) => const BookCourtPage(arenaName: 'Basketball Court'),
+        '/sports_status': (context) => const SportsStatusPage(arenaName: 'Basketball Court'),
         '/events': (context) => EventsPage(),
         '/seminars': (context) => SeminarsPage(),
         '/streetview': (context) => const StreetViewPage(),

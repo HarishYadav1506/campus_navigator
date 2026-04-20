@@ -1,16 +1,65 @@
 import 'package:flutter/material.dart';
 import '../../core/navigation_engine.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/navigation_service.dart';
 
-class NavigationPage extends StatelessWidget {
+class NavigationPage extends StatefulWidget {
   final String from;
   final String to;
 
-  const NavigationPage({Key? key, required this.from, required this.to})
-      : super(key: key);
+  const NavigationPage({Key? key, this.from = '', this.to = ''}) : super(key: key);
+
+  @override
+  State<NavigationPage> createState() => _NavigationPageState();
+}
+
+class _NavigationPageState extends State<NavigationPage> {
+  late final NavigationService _svc;
+  List<Map<String, dynamic>> _places = [];
+  List<String>? _path;
+  bool _loading = true;
+  String? _from;
+  String? _to;
+
+  @override
+  void initState() {
+    super.initState();
+    _svc = NavigationService(Supabase.instance.client);
+    _from = widget.from.isEmpty ? null : widget.from;
+    _to = widget.to.isEmpty ? null : widget.to;
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final rows = await _svc.fetchPlaces();
+      if (!mounted) return;
+      _places = rows;
+      if (_from == null && rows.isNotEmpty) _from = rows.first['name'].toString();
+      if (_to == null && rows.length > 1) _to = rows[1]['name'].toString();
+      await _compute();
+    } catch (_) {
+      await _compute();
+    }
+    if (!mounted) return;
+    setState(() => _loading = false);
+  }
+
+  Future<void> _compute() async {
+    if ((_from ?? '').isEmpty || (_to ?? '').isEmpty) {
+      _path = null;
+      return;
+    }
+    final dynamicPath = await _svc.shortestPath(_from!, _to!);
+    _path = dynamicPath ?? CampusGraph.shortestPath(_from!, _to!);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final path = CampusGraph.shortestPath(from, to);
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    final path = _path;
 
     return Scaffold(
       appBar: AppBar(
@@ -18,9 +67,47 @@ class NavigationPage extends StatelessWidget {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: path == null
+        child: Column(
+          children: [
+            DropdownButtonFormField<String>(
+              value: _from,
+              items: _places
+                  .map((p) => DropdownMenuItem<String>(
+                        value: p['name'].toString(),
+                        child: Text(p['name'].toString()),
+                      ))
+                  .toList(),
+              onChanged: (v) async {
+                setState(() => _from = v);
+                await _compute();
+                if (mounted) setState(() {});
+              },
+              decoration: const InputDecoration(labelText: 'From'),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _to,
+              items: _places
+                  .map((p) => DropdownMenuItem<String>(
+                        value: p['name'].toString(),
+                        child: Text(p['name'].toString()),
+                      ))
+                  .toList(),
+              onChanged: (v) async {
+                setState(() => _to = v);
+                await _compute();
+                if (mounted) setState(() {});
+              },
+              decoration: const InputDecoration(labelText: 'To'),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: path == null
             ? _buildNoPath(context)
             : _buildPathView(context, path),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -35,7 +122,7 @@ class NavigationPage extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          "From: $from\nTo:   $to",
+          "From: ${_from ?? '-'}\nTo:   ${_to ?? '-'}",
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 16),
@@ -73,7 +160,7 @@ class NavigationPage extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          "From: $from\nTo:   $to",
+          "From: ${_from ?? '-'}\nTo:   ${_to ?? '-'}",
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 16),

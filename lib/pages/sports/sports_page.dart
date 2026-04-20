@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/session_manager.dart';
-import 'book_court_page.dart';
+import 'sports_status_page.dart';
 
 class SportsPage extends StatelessWidget {
   SportsPage({super.key});
@@ -17,8 +17,8 @@ class SportsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final role = SessionManager.role;
 
-    final bool canBook =
-        SessionManager.isLoggedIn && (role == 'student' || role == 'prof');
+    final bool canBook = SessionManager.isLoggedIn &&
+        (role == 'student' || role == 'prof' || role == 'professor');
 
     return Scaffold(
       appBar: AppBar(title: const Text('Sports Booking')),
@@ -56,14 +56,14 @@ class SportsPage extends StatelessWidget {
                   return Card(
                     child: ListTile(
                       title: Text(arena),
-                      subtitle: const Text("Tap to book a 1-hour slot"),
+                      subtitle: const Text("Tap to view status and request booking"),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: canBook
                           ? () {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => BookCourtPage(
+                                  builder: (_) => SportsStatusPage(
                                     arenaName: arena,
                                   ),
                                 ),

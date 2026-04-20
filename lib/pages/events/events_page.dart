@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+
+import '../../core/session_manager.dart';
+import '../../services/engagement_service.dart';
 
 class EventsPage extends StatefulWidget {
   const EventsPage({super.key});
@@ -10,58 +14,113 @@ class EventsPage extends StatefulWidget {
 
 class _EventsPageState extends State<EventsPage> {
   final _supabase = Supabase.instance.client;
-  late Future<List<_Event>> _future;
+  final _eng = EngagementService(Supabase.instance.client);
+  final _searchController = TextEditingController();
+  String _query = '';
+  late final Stream<List<Map<String, dynamic>>> _eventRows;
+  Map<String, int> _interestWeights = {};
 
   @override
   void initState() {
     super.initState();
-    _future = _loadEvents();
+    _eventRows = _supabase
+        .from('events')
+        .stream(primaryKey: ['id'])
+        .order('date_time', ascending: true);
+    _loadInterests();
   }
 
-  Future<List<_Event>> _loadEvents() async {
-    final res = await _supabase
-        .from('events')
-        .select()
-        .order('date_time', ascending: true);
+  Future<void> _loadInterests() async {
+    final e = SessionManager.email;
+    if (e == null || e.isEmpty) return;
+    try {
+      final w = await _eng.fetchInterestWeights(e);
+      if (mounted) setState(() => _interestWeights = w);
+    } catch (_) {}
+  }
 
-    return (res as List)
-        .map((e) => _Event.fromMap(e as Map<String, dynamic>))
-        .toList();
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Research Events & Seminars')),
-      body: FutureBuilder<List<_Event>>(
-        future: _future,
+      appBar: AppBar(
+        title: const Text('Research Events & Seminars'),
+        actions: [
+          if ((SessionManager.role == 'admin') ||
+              (SessionManager.role == 'professor') ||
+              (SessionManager.role == 'prof'))
+            IconButton(
+              tooltip: 'Add event',
+              onPressed: () => Navigator.pushNamed(context, '/admin_events'),
+              icon: const Icon(Icons.add_circle_outline),
+            ),
+        ],
+      ),
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: _eventRows,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                "Failed to load events\n${snapshot.error}",
-                textAlign: TextAlign.center,
-              ),
-            );
-          }
-          final events = snapshot.data ?? [];
-          if (events.isEmpty) {
+          final events = (snapshot.data ?? [])
+              .map((e) => _Event.fromMap(Map<String, dynamic>.from(e)))
+              .toList();
+          events.sort((a, b) {
+            final sa = _interestWeights[a.type.toLowerCase()] ?? 0;
+            final sb = _interestWeights[b.type.toLowerCase()] ?? 0;
+            if (sa != sb) return sb.compareTo(sa);
+            return a.dateTime.compareTo(b.dateTime);
+          });
+          final filtered = _query.trim().isEmpty
+              ? events
+              : events.where((e) {
+                  final q = _query.toLowerCase();
+                  return e.title.toLowerCase().contains(q) ||
+                      e.type.toLowerCase().contains(q) ||
+                      e.location.toLowerCase().contains(q);
+                }).toList();
+
+          if (filtered.isEmpty) {
             return const Center(
-              child: Text("No upcoming events. Ask admins to add some in Supabase."),
+              child: Text("No matching events right now."),
             );
           }
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: events.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final e = events[index];
-              return _EventCard(event: e);
-            },
+          return RefreshIndicator(
+            onRefresh: _loadInterests,
+            child: ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: filtered.length + 1,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return TextField(
+                    controller: _searchController,
+                    onChanged: (v) => setState(() => _query = v),
+                    decoration: const InputDecoration(
+                      hintText: 'Search by title, type or location...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                  );
+                }
+                final e = filtered[index - 1];
+                return _EventCard(
+                  event: e,
+                  onInterest: () async {
+                    final email = SessionManager.email;
+                    if (email == null || email.isEmpty) return;
+                    await _eng.recordInterest(email, e.type);
+                    _loadInterests();
+                  },
+                ).animate().fadeIn(delay: (50 * (index - 1)).ms);
+              },
+            ),
           );
         },
       ),
@@ -78,8 +137,9 @@ class _EventsPageState extends State<EventsPage> {
 
 class _EventCard extends StatelessWidget {
   final _Event event;
+  final Future<void> Function() onInterest;
 
-  const _EventCard({required this.event});
+  const _EventCard({required this.event, required this.onInterest});
 
   @override
   Widget build(BuildContext context) {
@@ -104,7 +164,11 @@ class _EventCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
-          onTap: () {},
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Location: ${event.location}')),
+            );
+          },
           child: Padding(
             padding: const EdgeInsets.all(14.0),
             child: Row(
@@ -168,11 +232,26 @@ class _EventCard extends StatelessWidget {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white24),
+                        ),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Open map to ${event.location} from Home > Navigate')),
+                          );
+                        },
+                        icon: const Icon(Icons.navigation_outlined, size: 18),
+                        label: const Text('Navigate'),
+                      ),
                     ],
                   ),
                 ),
                 IconButton(
                   onPressed: () {
+                    onInterest();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text("Marked as interested: ${event.title}"),

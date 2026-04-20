@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/session_manager.dart';
+import '../../core/supabase_quota_support.dart';
+
 class OTPPage extends StatefulWidget {
   const OTPPage({super.key});
 
@@ -15,6 +18,8 @@ class _OTPPageState extends State<OTPPage> {
   final supabase = Supabase.instance.client;
 
   bool _loading = false;
+  bool _hidePassword = true;
+  bool _hideConfirmPassword = true;
 
   Future<void> verifyAndCreateUser(String email) async {
     if (password.text.isEmpty || confirmPassword.text.isEmpty) {
@@ -52,20 +57,29 @@ class _OTPPageState extends State<OTPPage> {
 
       final role = professor != null ? 'professor' : 'student';
 
-      // 3. Store user details in your "users" table.
-      //    Make sure your "users" table has at least: email (text), password (text), role (text).
-      await supabase.from('users').insert({
-        'email': email,
-        'password': password.text,
-        'role': role,
-      });
+      // 3. Profile row: use RPC so it works even when RLS blocks direct INSERT on public.users.
+      //    DB function sets email from JWT only (see migration create_user_after_otp).
+      await supabase.rpc<void>(
+        'create_user_after_otp',
+        params: {
+          'p_password': password.text,
+          'p_role': role,
+        },
+      );
+
+      SessionManager.setUser(newEmail: email.trim().toLowerCase(), newRole: role);
 
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/home');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Verification failed: $e")),
-      );
+      if (!mounted) return;
+      if (isSupabaseProjectRestrictedError(e)) {
+        showSupabaseRestrictedSnackBar(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Verification failed: $e')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -103,19 +117,43 @@ class _OTPPageState extends State<OTPPage> {
               const SizedBox(height: 16),
               TextField(
                 controller: password,
-                obscureText: true,
-                decoration: const InputDecoration(
+                obscureText: _hidePassword,
+                decoration: InputDecoration(
                   labelText: "Create Password",
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    tooltip: _hidePassword ? 'Show password' : 'Hide password',
+                    onPressed: () {
+                      setState(() => _hidePassword = !_hidePassword);
+                    },
+                    icon: Icon(
+                      _hidePassword ? Icons.visibility : Icons.visibility_off,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: confirmPassword,
-                obscureText: true,
-                decoration: const InputDecoration(
+                obscureText: _hideConfirmPassword,
+                decoration: InputDecoration(
                   labelText: "Confirm Password",
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    tooltip: _hideConfirmPassword
+                        ? 'Show confirm password'
+                        : 'Hide confirm password',
+                    onPressed: () {
+                      setState(
+                        () => _hideConfirmPassword = !_hideConfirmPassword,
+                      );
+                    },
+                    icon: Icon(
+                      _hideConfirmPassword
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 20),

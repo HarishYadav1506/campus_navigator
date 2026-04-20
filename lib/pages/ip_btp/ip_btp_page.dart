@@ -205,6 +205,26 @@ class _IpBtpPageState extends State<IpBtpPage> {
                   ),
 
                   const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ActionChip(
+                        label: const Text('Professor office slots'),
+                        avatar: const Icon(Icons.schedule, size: 18),
+                        onPressed: () => Navigator.pushNamed(context, '/prof_slots'),
+                      ),
+                      if (isProf)
+                        const Chip(
+                          label: Text('Prof: create & replicate slots'),
+                        ),
+                      if (isStudent)
+                        const Chip(
+                          label: Text('Student: search & book professor slot'),
+                        ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
 
                   // PROFESSOR FORM
                   if (isProf) ...[
