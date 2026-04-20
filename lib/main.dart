@@ -12,7 +12,8 @@ import 'pages/home/dashboard_page.dart';
 import 'pages/navigation/navigation_page.dart';
 import 'pages/chat/chat_list_page.dart';
 import 'pages/chat/chat_screen.dart';
-import 'pages/chat/create_group_page.dart';
+import 'pages/chat/create_office_hour_page.dart';
+import 'pages/chat/join_office_hour_page.dart';
 import 'pages/calendar/calendar_page.dart';
 import 'pages/calendar/book_slot_page.dart';
 import 'pages/ip_btp/ip_btp_page.dart';
@@ -107,7 +108,8 @@ class CampusNavigator extends StatelessWidget {
               currentUserEmail: 'demo@iiitd.ac.in',
               isGroup: true,
             ),
-        '/create_group': (context) => const CreateGroupPage(),
+        '/create_office_hour': (context) => const CreateOfficeHourPage(),
+        '/join_office_hour': (context) => const JoinOfficeHourPage(),
         '/calendar': (context) => const CalendarPage(),
         '/book_slot': (context) => const BookSlotPage(),
         '/ip_btp': (context) => const IpBtpPage(),

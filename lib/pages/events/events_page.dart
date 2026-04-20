@@ -70,6 +70,31 @@ class _EventsPageState extends State<EventsPage> {
           final events = (snapshot.data ?? [])
               .map((e) => _Event.fromMap(Map<String, dynamic>.from(e)))
               .toList();
+
+          // Add hardcoded events for "that day" and upcoming
+          events.addAll([
+            _Event(
+              id: 'local_event_1',
+              title: 'AI in Robotics Seminar',
+              type: 'Seminar',
+              dateTime: DateTime.now().add(const Duration(hours: 2)),
+              location: 'Lecture Hall Complex',
+            ),
+            _Event(
+              id: 'local_event_2',
+              title: 'Spring Tech Festival',
+              type: 'Event',
+              dateTime: DateTime.now().add(const Duration(hours: 4)),
+              location: 'R&D Block',
+            ),
+            _Event(
+              id: 'local_event_3',
+              title: 'Cybersecurity Workshop',
+              type: 'Event',
+              dateTime: DateTime.now().add(const Duration(days: 2)),
+              location: 'Seminar Block',
+            ),
+          ]);
           events.sort((a, b) {
             final sa = _interestWeights[a.type.toLowerCase()] ?? 0;
             final sb = _interestWeights[b.type.toLowerCase()] ?? 0;
@@ -239,8 +264,13 @@ class _EventCard extends StatelessWidget {
                           side: const BorderSide(color: Colors.white24),
                         ),
                         onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Open map to ${event.location} from Home > Navigate')),
+                          Navigator.pushNamed(
+                            context,
+                            '/navigator',
+                            arguments: {
+                              'from': 'IIITD Gate',
+                              'to': event.location,
+                            },
                           );
                         },
                         icon: const Icon(Icons.navigation_outlined, size: 18),

@@ -5,12 +5,15 @@ class ActivityService {
   final SupabaseClient _client;
 
   Future<void> log({
-    required String userEmail,
+    String? userEmail,
+    String? userId,
     required String action,
     Map<String, dynamic>? meta,
   }) async {
+    final actor = (userId ?? userEmail ?? '').trim();
+    if (actor.isEmpty) return;
     await _client.from('student_activity').insert({
-      'user_email': userEmail,
+      'user_email': actor,
       'action': action,
       'meta': meta ?? <String, dynamic>{},
     });

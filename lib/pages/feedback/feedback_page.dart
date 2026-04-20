@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../core/session_manager.dart';
 import '../../services/activity_service.dart';
 import '../../services/feedback_service.dart';
 
@@ -15,29 +14,33 @@ class FeedbackPage extends StatefulWidget {
 class _FeedbackPageState extends State<FeedbackPage> {
   final _svc = FeedbackService(Supabase.instance.client);
   final _activity = ActivityService(Supabase.instance.client);
-  final _email = TextEditingController(
-    text: (SessionManager.email ?? '').trim().toLowerCase(),
-  );
   final _message = TextEditingController();
   String _type = 'issue';
   int _rating = 4;
   bool _loading = false;
 
   Future<void> _submit() async {
-    final email = _email.text.trim().toLowerCase();
-    if (email.isEmpty) return;
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login first')),
+      );
+      return;
+    }
+    final userId = user.id;
     if (_message.text.trim().isEmpty) return;
     setState(() => _loading = true);
     try {
       await _svc.submit(
-        userEmail: email,
+        userId: userId,
         type: 'app',
         subject: _type,
         message: _message.text.trim(),
         rating: _rating,
       );
       await _activity.log(
-        userEmail: email,
+        userId: userId,
         action: 'feedback_submit',
         meta: {'type': _type},
       );
@@ -53,7 +56,6 @@ class _FeedbackPageState extends State<FeedbackPage> {
 
   @override
   void dispose() {
-    _email.dispose();
     _message.dispose();
     super.dispose();
   }
@@ -65,12 +67,6 @@ class _FeedbackPageState extends State<FeedbackPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(
-            controller: _email,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(labelText: 'Your email'),
-          ),
-          const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             value: _type,
             items: const [

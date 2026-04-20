@@ -10,21 +10,38 @@ class ManageSports extends StatefulWidget {
 
 class _ManageSportsState extends State<ManageSports> {
   final _supabase = Supabase.instance.client;
-  late Future<List<Map<String, dynamic>>> _future;
+  bool _loading = false;
+  List<Map<String, dynamic>> _pending = [];
+  List<Map<String, dynamic>> _occupied = [];
 
   @override
   void initState() {
     super.initState();
-    _future = _loadPending();
+    _loadAll();
   }
 
-  Future<List<Map<String, dynamic>>> _loadPending() async {
-    final rows = await _supabase
-        .from('sports_bookings')
-        .select()
-        .eq('status', 'pending')
-        .order('created_at', ascending: true);
-    return List<Map<String, dynamic>>.from(rows);
+  Future<void> _loadAll() async {
+    setState(() => _loading = true);
+    try {
+      final pRows = await _supabase
+          .from('sports_bookings')
+          .select()
+          .eq('status', 'pending')
+          .order('created_at', ascending: true);
+      
+      final oRows = await _supabase
+          .from('sports_arenas')
+          .select()
+          .eq('is_occupied', true);
+      
+      if (!mounted) return;
+      setState(() {
+        _pending = List<Map<String, dynamic>>.from(pRows);
+        _occupied = List<Map<String, dynamic>>.from(oRows);
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _approve(Map<String, dynamic> b) async {
@@ -50,51 +67,65 @@ class _ManageSportsState extends State<ManageSports> {
       'kind': 'sports',
     });
 
-    if (!mounted) return;
-    setState(() => _future = _loadPending());
+    _loadAll();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Sports approvals')),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _future,
-        builder: (context, snap) {
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-          final pending = snap.data!;
-          if (pending.isEmpty) return const Center(child: Text('No pending bookings'));
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: pending.length,
-            itemBuilder: (context, i) {
-              final b = pending[i];
-              return Card(
-                child: ListTile(
-                  title: Text((b['arena_name'] ?? '').toString()),
-                  subtitle: Text('${b['user_name']} • ${b['user_email']}'),
-                  trailing: ElevatedButton(
-                    onPressed: () => _approve(b),
-                    child: const Text('Approve'),
-                  ),
-                ),
-              );
-            },
-          );
-        },
+      appBar: AppBar(
+        title: const Text('Sports Approvals'),
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAll),
+        ],
       ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                const Text('Pending Approvals', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                const SizedBox(height: 8),
+                if (_pending.isEmpty)
+                  const Text('No pending bookings.')
+                else
+                  ..._pending.map((b) => Card(
+                    child: ListTile(
+                      title: Text((b['arena_name'] ?? '').toString()),
+                      subtitle: Text('${b['user_name']} • ${b['user_email']}'),
+                      trailing: ElevatedButton(
+                        onPressed: () => _approve(b),
+                        child: const Text('Approve'),
+                      ),
+                    ),
+                  )),
+                const Divider(height: 32),
+                const Text('Active Courts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                const SizedBox(height: 8),
+                if (_occupied.isEmpty)
+                  const Text('No courts are currently occupied.')
+                else
+                  ..._occupied.map((a) => Card(
+                    child: ListTile(
+                      title: Text((a['name'] ?? '').toString()),
+                      subtitle: Text('Occupied by: ${a['occupied_by_name'] ?? 'Unknown'} (${a['occupied_by_email'] ?? 'Unknown'})'),
+                      trailing: TextButton.icon(
+                        icon: const Icon(Icons.timer_off_outlined),
+                        label: const Text('Free Court'),
+                        style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                        onPressed: () async {
+                           await _supabase.from('sports_arenas').update({
+                             'is_occupied': false,
+                             'occupied_by_email': null,
+                             'occupied_by_name': null,
+                           }).eq('name', a['name']);
+                           _loadAll();
+                        },
+                      ),
+                    ),
+                  )),
+              ],
+            ),
     );
   }
 }
-
-/* old placeholder
-class ManageSports extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('Manage Sports')),
-      body: Center(child: Text('Manage Sports')),
-    );
-  }
-}
-*/

@@ -5,7 +5,7 @@ class FeedbackService {
   final SupabaseClient _client;
 
   Future<void> submit({
-    required String userEmail,
+    required String userId,
     required String type,
     required String subject,
     required String message,
@@ -13,7 +13,7 @@ class FeedbackService {
     int? rating,
   }) async {
     await _client.from('feedback_entries').insert({
-      'user_email': userEmail,
+      'user_id': userId,
       'feedback_type': type,
       'subject': subject,
       'message': message,

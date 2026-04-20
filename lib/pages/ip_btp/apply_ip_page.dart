@@ -12,6 +12,7 @@ class ApplyIpPage extends StatefulWidget {
 class _ApplyIpPageState extends State<ApplyIpPage> {
   final supabase = Supabase.instance.client;
 
+  final nameController = TextEditingController();
   final emailController = TextEditingController();
   final cgController = TextEditingController();
   final descController = TextEditingController();
@@ -21,10 +22,11 @@ class _ApplyIpPageState extends State<ApplyIpPage> {
 
   Future<void> submitApplication() async {
     final email = emailController.text.trim().toLowerCase();
+    final name = nameController.text.trim();
     final cgText = cgController.text.trim();
     final desc = descController.text.trim();
 
-    if (email.isEmpty || cgText.isEmpty || desc.isEmpty) {
+    if (email.isEmpty || name.isEmpty || cgText.isEmpty || desc.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill all fields")),
       );
@@ -69,14 +71,17 @@ class _ApplyIpPageState extends State<ApplyIpPage> {
         return;
       }
 
+      final fullDesc = "Name: $name\n\n$desc";
+
       await supabase.from('ip_btp_requests').insert({
         'student_email': email,
         'student_cg': cg,
-        'description': desc,
+        'description': fullDesc,
         'slot_id': slotId,
         'professor_email': professorEmail.isEmpty ? null : professorEmail,
       });
 
+      nameController.clear();
       emailController.clear();
       cgController.clear();
       descController.clear();
@@ -104,6 +109,7 @@ class _ApplyIpPageState extends State<ApplyIpPage> {
 
   @override
   void dispose() {
+    nameController.dispose();
     emailController.dispose();
     cgController.dispose();
     descController.dispose();
@@ -192,6 +198,11 @@ class _ApplyIpPageState extends State<ApplyIpPage> {
                 ),
               ),
             if (slot != null) const SizedBox(height: 12),
+            buildTextField(
+              controller: nameController,
+              label: "Full Name",
+            ),
+            const SizedBox(height: 16),
             buildTextField(
               controller: emailController,
               label: "College Email",

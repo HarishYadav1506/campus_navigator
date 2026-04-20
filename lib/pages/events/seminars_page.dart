@@ -47,7 +47,33 @@ class _SeminarsPageState extends State<SeminarsPage> {
               ),
             );
           }
-          final seminars = snapshot.data ?? [];
+          final seminars = List<_Seminar>.from(snapshot.data ?? []);
+          
+          // Add hardcoded seminars for today and upcoming
+          seminars.addAll([
+            _Seminar(
+              id: 'local_sem_1',
+              title: 'Advances in Deep Learning',
+              speaker: 'Dr. John Doe',
+              dateTime: DateTime.now().add(const Duration(hours: 3)),
+              venue: 'C-01, R&D Block',
+            ),
+            _Seminar(
+              id: 'local_sem_2',
+              title: 'Future of Cloud Computing',
+              speaker: 'Prof. Jane Smith',
+              dateTime: DateTime.now().add(const Duration(days: 1)),
+              venue: 'C-02, R&D Block',
+            ),
+            _Seminar(
+              id: 'local_sem_3',
+              title: 'Quantum Algorithms',
+              speaker: 'Dr. Alan Turing',
+              dateTime: DateTime.now().add(const Duration(days: 3)),
+              venue: 'Main Auditorium',
+            ),
+          ]);
+          seminars.sort((a, b) => a.dateTime.compareTo(b.dateTime));
           if (seminars.isEmpty) {
             return const Center(
               child: Text("No seminars found. Add rows in the 'seminars' table."),

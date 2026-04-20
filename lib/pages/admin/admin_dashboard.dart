@@ -29,54 +29,57 @@ class AdminDashboard extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _AdminTile(
-            icon: Icons.campaign_outlined,
-            title: 'Announcements',
-            subtitle: 'Add and filter by sports/events/seminars/notices',
-            onTap: () => Navigator.pushNamed(context, '/admin_announcements'),
-          ),
-          _AdminTile(
-            icon: Icons.event_note_outlined,
-            title: 'Manage events / seminars',
-            subtitle: 'Add new event and seminar details',
-            onTap: () => Navigator.pushNamed(context, '/admin_events'),
-          ),
-          _AdminTile(
-            icon: Icons.person_add_alt_1_outlined,
-            title: 'Manage professors',
-            subtitle: 'Add new professor information',
-            onTap: () => Navigator.pushNamed(context, '/admin_professors'),
-          ),
-          _AdminTile(
-            icon: Icons.sports_soccer_outlined,
-            title: 'Sports approvals',
-            subtitle: 'Approve queued sports bookings',
-            onTap: () => Navigator.pushNamed(context, '/admin_sports'),
-          ),
-          _AdminTile(
-            icon: Icons.approval_outlined,
-            title: 'Request approvals',
-            subtitle: 'Approve or reject pending requests',
-            onTap: () => Navigator.pushNamed(context, '/admin_approvals'),
-          ),
-          _AdminTile(
-            icon: Icons.monitor_heart_outlined,
-            title: 'Student activity',
-            subtitle: 'Monitor recent user actions',
-            onTap: () => Navigator.pushNamed(context, '/admin_activity'),
-          ),
-          _AdminTile(
-            icon: Icons.feedback_outlined,
-            title: 'View feedback',
-            subtitle: 'Course/app feedback with filtering',
-            onTap: () => Navigator.pushNamed(context, '/admin_feedback'),
-          ),
-          _AdminTile(
-            icon: Icons.work_outline,
-            title: 'TPO postings',
-            subtitle: 'Add placements and internships',
-            onTap: () => Navigator.pushNamed(context, '/admin_tpo'),
-          ),
+          if (role == 'admin') ...[
+            _AdminTile(
+              icon: Icons.campaign_outlined,
+              title: 'Announcements',
+              subtitle: 'Add and filter by sports/events/seminars/notices',
+              onTap: () => Navigator.pushNamed(context, '/admin_announcements'),
+            ),
+            _AdminTile(
+              icon: Icons.event_note_outlined,
+              title: 'Manage events / seminars',
+              subtitle: 'Add new event and seminar details',
+              onTap: () => Navigator.pushNamed(context, '/admin_events'),
+            ),
+            _AdminTile(
+              icon: Icons.person_add_alt_1_outlined,
+              title: 'Manage professors',
+              subtitle: 'Add new professor information',
+              onTap: () => Navigator.pushNamed(context, '/admin_professors'),
+            ),
+            _AdminTile(
+              icon: Icons.sports_soccer_outlined,
+              title: 'Sports approvals',
+              subtitle: 'Approve queued sports bookings',
+              onTap: () => Navigator.pushNamed(context, '/admin_sports'),
+            ),
+            _AdminTile(
+              icon: Icons.approval_outlined,
+              title: 'Request approvals',
+              subtitle: 'Approve or reject pending requests',
+              onTap: () => Navigator.pushNamed(context, '/admin_approvals'),
+            ),
+            _AdminTile(
+              icon: Icons.feedback_outlined,
+              title: 'View feedback',
+              subtitle: 'Course/app feedback with filtering',
+              onTap: () => Navigator.pushNamed(context, '/admin_feedback'),
+            ),
+          ] else if (role == 'prof' || role == 'professor') ...[
+            _AdminTile(
+              icon: Icons.event_note_outlined,
+              title: 'Manage events / seminars',
+              subtitle: 'Add new event and seminar details',
+              onTap: () => Navigator.pushNamed(context, '/admin_events'),
+            ),
+            _AdminTile(
+              icon: Icons.person_add_alt_1_outlined,
+              title: 'Update Profile',
+              subtitle: 'Update your professor details',
+              onTap: () => Navigator.pushNamed(context, '/admin_professors'),
+            ),
+          ]
         ],
       ),
     );

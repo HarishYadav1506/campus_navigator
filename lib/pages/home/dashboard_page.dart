@@ -7,8 +7,8 @@ class DashboardPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final role = SessionManager.role ?? 'student';
-    final isStudent = role == 'student';
     final isProf = role == 'prof' || role == 'professor';
+    final isStudent = role == 'student' || isProf;
     return Scaffold(
       appBar: AppBar(
         title: const Text("Dashboard"),
@@ -33,11 +33,8 @@ class DashboardPage extends StatelessWidget {
             _dashCard(context, 'Feedback', 'Course and app feedback', '/feedback'),
             _dashCard(context, 'Sports', 'Book sports facilities', '/sports'),
           ],
-          if (isProf) ...[
-            _dashCard(context, 'Admin Panel', 'Manage announcements and approvals', '/admin'),
-            _dashCard(context, 'Professor Slots', 'Create and replicate office slots', '/prof_slots'),
-            _dashCard(context, 'Events', 'Add seminars and events', '/admin_events'),
-          ],
+
+
           if (role == 'admin') ...[
             _dashCard(context, 'Admin Panel', 'Open admin dashboard', '/admin'),
             _dashCard(context, 'TPO Admin', 'Add placements/internships', '/admin_tpo'),

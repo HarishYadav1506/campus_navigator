@@ -17,12 +17,41 @@ class _CalendarPageState extends State<CalendarPage> {
   String _keyForDate(DateTime date) =>
       "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
 
-  void _addSlot() {
+  void _addSlot() async {
+    final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    if (time == null) return;
+    
     final key = _keyForDate(_selectedDay);
     setState(() {
       _slots.putIfAbsent(key, () => []);
-      _slots[key]!.add("Meeting / class at ${_selectedDay.hour.toString().padLeft(2, '0')}:00");
+      _slots[key]!.add("Meeting at ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}");
     });
+  }
+
+  void _copyPreviousDay() {
+    final prevDay = _selectedDay.subtract(const Duration(days: 1));
+    final prevKey = _keyForDate(prevDay);
+    final currKey = _keyForDate(_selectedDay);
+    
+    final prevSlots = _slots[prevKey] ?? [];
+    if (prevSlots.isNotEmpty) {
+      setState(() {
+        _slots.putIfAbsent(currKey, () => []);
+        // Avoid adding exact duplicates if copied multiple times
+        for (var s in prevSlots) {
+          if (!_slots[currKey]!.contains(s)) {
+            _slots[currKey]!.add(s);
+          }
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Copied ${prevSlots.length} slots from yesterday.")),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No slots to copy from yesterday.")),
+      );
+    }
   }
 
   @override
@@ -30,10 +59,21 @@ class _CalendarPageState extends State<CalendarPage> {
     final key = _keyForDate(_selectedDay);
     final todaySlots = _slots[key] ?? [];
     final role = SessionManager.role ?? 'guest';
+    final isProf = role == 'prof' || role == 'professor';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Calendar & Slots')),
-      floatingActionButton: SessionManager.isLoggedIn
+      appBar: AppBar(
+        title: const Text('Calendar & Slots'),
+        actions: [
+          if (isProf)
+            IconButton(
+              icon: const Icon(Icons.copy),
+              tooltip: "Copy from previous day",
+              onPressed: _copyPreviousDay,
+            ),
+        ],
+      ),
+      floatingActionButton: isProf
           ? FloatingActionButton.extended(
               onPressed: _addSlot,
               icon: const Icon(Icons.add),
@@ -58,30 +98,71 @@ class _CalendarPageState extends State<CalendarPage> {
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: todaySlots.isEmpty
-                  ? const Center(
-                      child: Text("No slots booked for this day."),
-                    )
-                  : ListView.separated(
-                      itemCount: todaySlots.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (context, index) {
-                        final slot = todaySlots[index];
-                        return ListTile(
-                          leading: const Icon(Icons.event_available),
-                          title: Text(slot),
-                          subtitle: const Text("Demo calendar entry"),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () {
-                              setState(() {
-                                todaySlots.removeAt(index);
-                              });
-                            },
-                          ),
-                        );
-                      },
+              child: ListView.builder(
+                itemCount: 24,
+                itemBuilder: (context, index) {
+                  final hourStr = index.toString().padLeft(2, '0');
+                  
+                  // Simple check: if the event string contains "at HH:", it belongs here
+                  final eventsInHour = todaySlots.where((s) => s.contains("at $hourStr:")).toList();
+                  
+                  return Container(
+                    constraints: const BoxConstraints(minHeight: 60),
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: Colors.white12),
+                      ),
                     ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 60,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text(
+                              "$hourStr:00",
+                              style: const TextStyle(color: Colors.white60),
+                            ),
+                          ),
+                        ),
+                        const VerticalDivider(width: 1, color: Colors.white12),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: eventsInHour.map((e) => Container(
+                                margin: const EdgeInsets.only(bottom: 4),
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.indigo.withOpacity(0.8),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(child: Text(e, style: const TextStyle(fontSize: 13))),
+                                    if (isProf)
+                                      InkWell(
+                                        child: const Icon(Icons.close, size: 14),
+                                        onTap: () {
+                                          setState(() {
+                                            todaySlots.remove(e);
+                                          });
+                                        },
+                                      )
+                                  ],
+                                ),
+                              )).toList(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -101,8 +182,8 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Widget _buildDateRow() {
     final dates = List<DateTime>.generate(
-      7,
-      (index) => DateTime.now().add(Duration(days: index)),
+      14, // show 14 days
+      (index) => DateTime.now().subtract(const Duration(days: 3)).add(Duration(days: index)),
     );
 
     return SizedBox(
@@ -126,9 +207,9 @@ class _CalendarPageState extends State<CalendarPage> {
             child: Container(
               width: 70,
               decoration: BoxDecoration(
-                color: isSelected ? Colors.indigo : Colors.white,
+                color: isSelected ? Colors.indigo : Colors.white.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.indigo.shade200),
+                border: Border.all(color: Colors.indigo.shade200.withOpacity(isSelected ? 1.0 : 0.2)),
               ),
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: Column(
@@ -137,7 +218,7 @@ class _CalendarPageState extends State<CalendarPage> {
                   Text(
                     ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.weekday % 7],
                     style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.indigo,
+                      color: isSelected ? Colors.white : Colors.white70,
                       fontSize: 12,
                     ),
                   ),
@@ -145,7 +226,7 @@ class _CalendarPageState extends State<CalendarPage> {
                   Text(
                     date.day.toString(),
                     style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.indigo,
+                      color: isSelected ? Colors.white : Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
@@ -159,4 +240,3 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 }
-

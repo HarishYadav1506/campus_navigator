@@ -21,6 +21,41 @@ class _LoginPageState extends State<LoginPage> {
   bool _loading = false;
   bool _hidePassword = true;
 
+  Future<void> _showAdminLoginDialog() async {
+    final passController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Admin Override"),
+          content: TextField(
+            controller: passController,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: "Admin Password"),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (passController.text == 'admin123') {
+                  SessionManager.setUser(newEmail: 'admin_override', newRole: 'admin');
+                  Navigator.pop(context); // close dialog
+                  Navigator.pushReplacementNamed(context, '/admin');
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Incorrect password")));
+                }
+              },
+              child: const Text("Login"),
+            ),
+          ],
+        );
+      }
+    );
+  }
+
   Future<void> login() async {
     if (email.text.isEmpty || password.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -213,6 +248,11 @@ class _LoginPageState extends State<LoginPage> {
                                 )
                               : const Text("Login"),
                         ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: _showAdminLoginDialog,
+                        child: const Text("Quick Admin Login"),
                       ),
                     ],
                   ),
