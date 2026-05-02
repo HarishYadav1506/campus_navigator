@@ -8,6 +8,9 @@ class ChatScreen extends StatefulWidget {
   final String currentUserEmail;
   final bool isGroup;
   final String chatType;
+  final int? maxMembers;
+  final int? messageStartHour;
+  final int? messageEndHour;
   final DateTime? officeHoursStart;
   final DateTime? officeHoursEnd;
 
@@ -18,6 +21,9 @@ class ChatScreen extends StatefulWidget {
     required this.currentUserEmail,
     required this.isGroup,
     this.chatType = 'normal',
+    this.maxMembers,
+    this.messageStartHour,
+    this.messageEndHour,
     this.officeHoursStart,
     this.officeHoursEnd,
   });
@@ -37,8 +43,15 @@ class _ChatScreenState extends State<ChatScreen> {
   bool get _isStudent => (SessionManager.role ?? '') == 'student';
 
   bool get _canStudentSend {
-    if (widget.chatType != 'office_hours') return true;
     if (!_isStudent) return true;
+    if (widget.chatType == 'classroom') {
+      final start = widget.messageStartHour;
+      final end = widget.messageEndHour;
+      if (start == null || end == null) return true;
+      final hour = DateTime.now().hour;
+      return hour >= start && hour <= end;
+    }
+    if (widget.chatType != 'office_hours') return true;
     final start = widget.officeHoursStart;
     final end = widget.officeHoursEnd;
     if (start == null || end == null) return true;
@@ -76,7 +89,7 @@ class _ChatScreenState extends State<ChatScreen> {
         .eq('room_id', widget.chatId)
         .order('created_at', ascending: true);
 
-    final officeBanner = (widget.chatType == 'office_hours' && _isStudent)
+    final studentBanner = ((widget.chatType == 'office_hours' || widget.chatType == 'classroom') && _isStudent)
         ? Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
             child: Container(
@@ -91,9 +104,13 @@ class _ChatScreenState extends State<ChatScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      _canStudentSend
-                          ? 'Office hours are active. Send your doubts now.'
-                          : 'Office hours have ended. You cannot send doubts now.',
+                      widget.chatType == 'classroom'
+                          ? (_canStudentSend
+                              ? 'Class chat is active right now.'
+                              : 'Message window closed. Student messages are time-restricted.')
+                          : (_canStudentSend
+                              ? 'Office hours are active. Send your doubts now.'
+                              : 'Office hours have ended. You cannot send doubts now.'),
                       style: const TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ),
@@ -136,7 +153,15 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
-          officeBanner,
+          studentBanner,
+          if (widget.chatType == 'classroom')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+              child: Text(
+                'Group capacity: ${widget.maxMembers ?? '-'} • Time window: ${widget.messageStartHour ?? '-'}:00 to ${widget.messageEndHour ?? '-'}:00',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
             child: TextField(

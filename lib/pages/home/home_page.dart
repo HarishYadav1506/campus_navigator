@@ -1,7 +1,9 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/session_manager.dart';
+import '../../services/navigation_service.dart';
 import '../../widgets/campus_essentials_strip.dart';
 import '../../widgets/notification_icon_button.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -677,6 +679,55 @@ class _FromToDialog extends StatefulWidget {
 class _FromToDialogState extends State<_FromToDialog> {
   final fromController = TextEditingController();
   final toController = TextEditingController();
+  late final NavigationService _navigationService;
+  List<String> _locationOptions = const [];
+  bool _loadingOptions = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _navigationService = NavigationService(Supabase.instance.client);
+    _loadLocations();
+  }
+
+  Future<void> _loadLocations() async {
+    try {
+      final places = await _navigationService.fetchPlaces();
+      if (!mounted) return;
+      setState(() {
+        _locationOptions = places
+            .map((p) {
+              final name = p['name']?.toString().trim();
+              if (name != null && name.isNotEmpty) return name;
+              final placeName = p['place_name']?.toString().trim();
+              return (placeName == null || placeName.isEmpty) ? null : placeName;
+            })
+            .whereType<String>()
+            .toSet()
+            .toList()
+          ..sort();
+        _loadingOptions = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingOptions = false);
+    }
+  }
+
+  Iterable<String> _filterOptions(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return _locationOptions.take(12);
+    return _locationOptions
+        .where((option) => option.toLowerCase().contains(q))
+        .take(12);
+  }
+
+  @override
+  void dispose() {
+    fromController.dispose();
+    toController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -685,21 +736,63 @@ class _FromToDialogState extends State<_FromToDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(
-            controller: fromController,
-            decoration: const InputDecoration(
-              labelText: "From",
-              hintText: "e.g. Hostel, Gate, Block A",
-            ),
+          Autocomplete<String>(
+            optionsBuilder: (textEditingValue) => _filterOptions(textEditingValue.text),
+            onSelected: (value) => fromController.text = value,
+            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+              if (controller.text.isEmpty && fromController.text.isNotEmpty) {
+                controller.text = fromController.text;
+                controller.selection = TextSelection.fromPosition(
+                  TextPosition(offset: controller.text.length),
+                );
+              }
+              return TextField(
+                controller: controller,
+                focusNode: focusNode,
+                onChanged: (value) => fromController.text = value,
+                decoration: InputDecoration(
+                  labelText: "From",
+                  hintText: _loadingOptions
+                      ? "Loading locations..."
+                      : "Type to search locations",
+                ),
+              );
+            },
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: toController,
-            decoration: const InputDecoration(
-              labelText: "To",
-              hintText: "e.g. Library, CSE Dept, Ground",
-            ),
+          Autocomplete<String>(
+            optionsBuilder: (textEditingValue) => _filterOptions(textEditingValue.text),
+            onSelected: (value) => toController.text = value,
+            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+              if (controller.text.isEmpty && toController.text.isNotEmpty) {
+                controller.text = toController.text;
+                controller.selection = TextSelection.fromPosition(
+                  TextPosition(offset: controller.text.length),
+                );
+              }
+              return TextField(
+                controller: controller,
+                focusNode: focusNode,
+                onChanged: (value) => toController.text = value,
+                decoration: InputDecoration(
+                  labelText: "To",
+                  hintText: _loadingOptions
+                      ? "Loading locations..."
+                      : "Type to search locations",
+                ),
+              );
+            },
           ),
+          if (_locationOptions.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                "Suggestions: ${_locationOptions.take(8).join(', ')}",
+                style: const TextStyle(fontSize: 11, color: Colors.white70),
+              ),
+            ),
+          ],
         ],
       ),
       actions: [
@@ -708,10 +801,29 @@ class _FromToDialogState extends State<_FromToDialog> {
           child: const Text("Cancel"),
         ),
         ElevatedButton(
-          onPressed: () {
+          onPressed: () async {
+            final rawFrom = fromController.text.trim();
+            final rawTo = toController.text.trim();
+            if (rawFrom.isEmpty || rawTo.isEmpty) {
+              return;
+            }
+
+            final resolvedFrom = await _navigationService.resolvePlaceName(rawFrom);
+            final resolvedTo = await _navigationService.resolvePlaceName(rawTo);
+
+            if (!mounted) return;
+            if (resolvedFrom == null || resolvedTo == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Choose locations from the list or type a closer match.'),
+                ),
+              );
+              return;
+            }
+
             Navigator.pop<Map<String, String>>(context, {
-              'from': fromController.text.trim(),
-              'to': toController.text.trim(),
+              'from': resolvedFrom,
+              'to': resolvedTo,
             });
           },
           child: const Text("Navigate"),

@@ -10,25 +10,49 @@ class CalendarPage extends StatefulWidget {
 
 class _CalendarPageState extends State<CalendarPage> {
   DateTime _selectedDay = DateTime.now();
-
-  // Simple in-memory demo slots map: date (yyyy-mm-dd) -> list of strings
-  final Map<String, List<String>> _slots = {};
+  final Map<String, List<_DaySlot>> _slots = {};
 
   String _keyForDate(DateTime date) =>
       "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+
+  bool get _isProf => SessionManager.role == 'prof' || SessionManager.role == 'professor';
 
   void _addSlot() {
     final key = _keyForDate(_selectedDay);
     setState(() {
       _slots.putIfAbsent(key, () => []);
-      _slots[key]!.add("Meeting / class at ${_selectedDay.hour.toString().padLeft(2, '0')}:00");
+      _slots[key]!.add(
+        _DaySlot(
+          title: _isProf ? 'Office hour / class' : 'Meeting / class',
+          startHour: 10,
+          endHour: 11,
+        ),
+      );
+    });
+  }
+
+  void _copyPreviousDayToToday() {
+    final prev = _selectedDay.subtract(const Duration(days: 1));
+    final prevKey = _keyForDate(prev);
+    final currentKey = _keyForDate(_selectedDay);
+    final prevSlots = _slots[prevKey] ?? [];
+    if (prevSlots.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No slots found on previous day')),
+      );
+      return;
+    }
+    setState(() {
+      _slots[currentKey] = prevSlots
+          .map((s) => _DaySlot(title: s.title, startHour: s.startHour, endHour: s.endHour))
+          .toList();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final key = _keyForDate(_selectedDay);
-    final todaySlots = _slots[key] ?? [];
+    final todaySlots = _slots[key] ?? <_DaySlot>[];
     final role = SessionManager.role ?? 'guest';
 
     return Scaffold(
@@ -52,6 +76,16 @@ class _CalendarPageState extends State<CalendarPage> {
             const SizedBox(height: 12),
             _buildDateRow(),
             const SizedBox(height: 16),
+            if (_isProf)
+              Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton.icon(
+                  onPressed: _copyPreviousDayToToday,
+                  icon: const Icon(Icons.copy_all_outlined),
+                  label: const Text('Copy previous day'),
+                ),
+              ),
+            if (_isProf) const SizedBox(height: 8),
             Text(
               "Slots for ${_selectedDay.day}/${_selectedDay.month}/${_selectedDay.year}",
               style: Theme.of(context).textTheme.titleMedium,
@@ -63,22 +97,24 @@ class _CalendarPageState extends State<CalendarPage> {
                       child: Text("No slots booked for this day."),
                     )
                   : ListView.separated(
-                      itemCount: todaySlots.length,
+                      itemCount: 24,
                       separatorBuilder: (_, __) => const SizedBox(height: 6),
                       itemBuilder: (context, index) {
-                        final slot = todaySlots[index];
+                        final active = todaySlots.where((s) => index >= s.startHour && index < s.endHour).toList();
                         return ListTile(
-                          leading: const Icon(Icons.event_available),
-                          title: Text(slot),
-                          subtitle: const Text("Demo calendar entry"),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () {
-                              setState(() {
-                                todaySlots.removeAt(index);
-                              });
-                            },
-                          ),
+                          leading: const Icon(Icons.schedule),
+                          title: Text('${index.toString().padLeft(2, '0')}:00 - ${(index + 1).toString().padLeft(2, '0')}:00'),
+                          subtitle: active.isEmpty ? const Text("Free") : Text(active.map((e) => e.title).join(', ')),
+                          trailing: active.isEmpty
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: () {
+                                    setState(() {
+                                      _slots[key]!.removeWhere((s) => index >= s.startHour && index < s.endHour);
+                                    });
+                                  },
+                                ),
                         );
                       },
                     ),
@@ -158,5 +194,17 @@ class _CalendarPageState extends State<CalendarPage> {
       ),
     );
   }
+}
+
+class _DaySlot {
+  final String title;
+  final int startHour;
+  final int endHour;
+
+  _DaySlot({
+    required this.title,
+    required this.startHour,
+    required this.endHour,
+  });
 }
 

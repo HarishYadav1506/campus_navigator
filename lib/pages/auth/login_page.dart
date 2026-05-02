@@ -81,16 +81,14 @@ class _LoginPageState extends State<LoginPage> {
 
       // 2. Read role directly from the "users" table.
       //    It is set at signup time by checking "professors_login".
-      String role = (userRes['role'] as String?) ?? 'student';
+      final role = ((userRes['role'] as String?) ?? 'student').trim().toLowerCase();
       SessionManager.setUser(newEmail: normalizedEmail, newRole: role);
 
       if (!mounted) return;
 
       Navigator.pushReplacementNamed(
         context,
-        (role == 'admin' || role == 'prof' || role == 'professor')
-            ? '/admin'
-            : '/home',
+        role == 'admin' ? '/admin' : '/home',
       );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Logged in as $role")),

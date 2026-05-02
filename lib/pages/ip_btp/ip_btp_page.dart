@@ -126,7 +126,7 @@ class _IpBtpPageState extends State<IpBtpPage> {
   Widget build(BuildContext context) {
 
     final role = SessionManager.role;
-    final isProf = role == 'professor';
+    final isProf = role == 'professor' || role == 'prof';
     final isStudent = role == 'student';
     final filtered = _search.isEmpty
         ? slots
@@ -178,8 +178,8 @@ class _IpBtpPageState extends State<IpBtpPage> {
                             ),
                             Text(
                               isProf
-                                  ? "Release slots with a CGPA cap."
-                                  : "Browse slots and apply if you meet the cap.",
+                                  ? "Announce IP/BTP topics with minimum CGPA."
+                                  : "Browse announcements and apply if you meet the CGPA.",
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
@@ -232,7 +232,7 @@ class _IpBtpPageState extends State<IpBtpPage> {
                     const SizedBox(height: 10),
                   ],
 
-                  // SLOT LIST
+                  // ANNOUNCEMENT LIST
                   Expanded(
                     child: filtered.isEmpty
                         ? const Center(
@@ -421,7 +421,7 @@ class _IpBtpPageState extends State<IpBtpPage> {
                             size: 18,
                           ),
                   ),
-                  label: const Text("Publish slot"),
+                  label: const Text("Publish announcement"),
                 ),
               ),
             ),

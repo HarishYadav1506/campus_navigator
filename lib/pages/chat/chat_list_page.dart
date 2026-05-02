@@ -39,7 +39,7 @@ class _ChatListPageState extends State<ChatListPage> {
 
     final rooms = await _supabase
         .from('chat_rooms')
-        .select('id,name,is_group,type,office_hours_start,office_hours_end,chat_room_members!inner(user_id)')
+        .select('id,name,is_group,type,class_code,max_members,message_start_hour,message_end_hour,office_hours_start,office_hours_end,chat_room_members!inner(user_id)')
         .eq('chat_room_members.user_id', userId);
 
     final list = (rooms as List)
@@ -56,6 +56,69 @@ class _ChatListPageState extends State<ChatListPage> {
       _chats = list;
       _applyFilters();
     });
+  }
+
+  Future<void> _joinByClassCode() async {
+    final codeCtrl = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Join class chat'),
+        content: TextField(
+          controller: codeCtrl,
+          textCapitalization: TextCapitalization.characters,
+          decoration: const InputDecoration(
+            labelText: 'Class code',
+            hintText: 'Enter code from professor',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final code = codeCtrl.text.trim().toUpperCase();
+              if (code.isEmpty) return;
+              try {
+                final email = (SessionManager.email ?? '').trim().toLowerCase();
+                final me = await _supabase.from('profiles').select('id').eq('email', email).maybeSingle();
+                if (me == null) throw Exception('Profile not found');
+                final room = await _supabase
+                    .from('chat_rooms')
+                    .select('id,max_members')
+                    .eq('class_code', code)
+                    .maybeSingle();
+                if (room == null) throw Exception('Invalid class code');
+                final countRes = await _supabase
+                    .from('chat_room_members')
+                    .select('id')
+                    .eq('room_id', room['id']);
+                final memberCount = (countRes as List).length;
+                final cap = (room['max_members'] is num) ? (room['max_members'] as num).toInt() : 100;
+                if (memberCount >= cap) throw Exception('Group is full');
+                await _supabase.from('chat_room_members').upsert({
+                  'room_id': room['id'],
+                  'user_id': me['id'],
+                  'role': 'student',
+                });
+                if (!mounted) return;
+                Navigator.pop(context);
+                _loadChats();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Joined class chat')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Could not join: $e')),
+                );
+              }
+            },
+            child: const Text('Join'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _applyFilters() {
@@ -80,6 +143,12 @@ class _ChatListPageState extends State<ChatListPage> {
       appBar: AppBar(
         title: const Text('Chats'),
         actions: [
+          if (role == 'student')
+            IconButton(
+              icon: const Icon(Icons.key_outlined),
+              tooltip: 'Join by class code',
+              onPressed: _joinByClassCode,
+            ),
           if (role == 'prof' || role == 'professor')
             IconButton(
               icon: const Icon(Icons.group_add),
@@ -163,6 +232,9 @@ class _ChatListPageState extends State<ChatListPage> {
                                 currentUserEmail: email,
                                 isGroup: chat.isGroup,
                                 chatType: chat.type,
+                                maxMembers: chat.maxMembers,
+                                messageStartHour: chat.messageStartHour,
+                                messageEndHour: chat.messageEndHour,
                                 officeHoursStart: chat.officeHoursStart,
                                 officeHoursEnd: chat.officeHoursEnd,
                               ),
@@ -202,6 +274,9 @@ class _ChatItem {
   final bool isGroup;
   final String type; // normal, office_hours
   final bool isPinned;
+  final int? maxMembers;
+  final int? messageStartHour;
+  final int? messageEndHour;
   final DateTime? officeHoursStart;
   final DateTime? officeHoursEnd;
 
@@ -211,6 +286,9 @@ class _ChatItem {
     required this.isGroup,
     required this.type,
     this.isPinned = false,
+    this.maxMembers,
+    this.messageStartHour,
+    this.messageEndHour,
     this.officeHoursStart,
     this.officeHoursEnd,
   });
@@ -222,6 +300,9 @@ class _ChatItem {
       isGroup: (map['is_group'] ?? true) as bool,
       type: (map['type'] ?? 'normal') as String,
       isPinned: (map['is_pinned'] ?? false) as bool,
+      maxMembers: map['max_members'] is num ? (map['max_members'] as num).toInt() : null,
+      messageStartHour: map['message_start_hour'] is num ? (map['message_start_hour'] as num).toInt() : null,
+      messageEndHour: map['message_end_hour'] is num ? (map['message_end_hour'] as num).toInt() : null,
       officeHoursStart: map['office_hours_start'] == null
           ? null
           : DateTime.tryParse(map['office_hours_start'].toString()),

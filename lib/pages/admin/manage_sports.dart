@@ -10,72 +10,119 @@ class ManageSports extends StatefulWidget {
 
 class _ManageSportsState extends State<ManageSports> {
   final _supabase = Supabase.instance.client;
-  late Future<List<Map<String, dynamic>>> _future;
 
-  @override
-  void initState() {
-    super.initState();
-    _future = _loadPending();
+  String _fmt(DateTime dt) {
+    final local = dt.toLocal();
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return '$hh:$mm';
   }
 
-  Future<List<Map<String, dynamic>>> _loadPending() async {
-    final rows = await _supabase
-        .from('sports_bookings')
-        .select()
-        .eq('status', 'pending')
-        .order('created_at', ascending: true);
-    return List<Map<String, dynamic>>.from(rows);
+  DateTime _nextAvailableForArena(String arena, List<Map<String, dynamic>> all) {
+    final now = DateTime.now().toUtc();
+    DateTime? latestApprovedOrActive;
+    for (final b in all) {
+      if ((b['arena_name'] ?? '').toString() != arena) continue;
+      final status = (b['status'] ?? '').toString();
+      if (status != 'approved' && status != 'active') continue;
+      final t = DateTime.tryParse((b['booking_time'] ?? '').toString());
+      if (t == null) continue;
+      if (latestApprovedOrActive == null || t.isAfter(latestApprovedOrActive)) {
+        latestApprovedOrActive = t;
+      }
+    }
+    if (latestApprovedOrActive == null) return now;
+    final slotEnd = latestApprovedOrActive.add(const Duration(hours: 1));
+    return slotEnd.isAfter(now) ? slotEnd : now;
   }
 
   Future<void> _approve(Map<String, dynamic> b) async {
     final now = DateTime.now().toUtc();
-    await _supabase.from('sports_bookings').update({
-      'status': 'approved',
-      'approved_at': now.toIso8601String(),
-      'checkin_deadline': now.add(const Duration(minutes: 10)).toIso8601String(),
-      'ends_at': now.add(const Duration(hours: 1)).toIso8601String(),
-    }).eq('id', b['id']);
+    try {
+      await _supabase.from('sports_bookings').update({
+        'status': 'approved',
+        'booking_time': now.toIso8601String(),
+      }).eq('id', b['id']);
 
-    await _supabase.from('sports_arenas').upsert({
-      'name': b['arena_name'],
-      'is_occupied': true,
-      'occupied_by_email': b['user_email'],
-      'occupied_by_name': b['user_name'],
-    }, onConflict: 'name');
+      await _supabase.from('user_notifications').insert({
+        'user_email': b['user_email'],
+        'title': 'Sports booking approved',
+        'body': 'Your slot at ${b['arena_name']} is approved. Reach in 10 min.',
+        'kind': 'sports',
+      });
 
-    await _supabase.from('user_notifications').insert({
-      'user_email': b['user_email'],
-      'title': 'Sports booking approved',
-      'body': 'Your slot at ${b['arena_name']} is approved. Reach in 10 min.',
-      'kind': 'sports',
-    });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Booking approved')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Approval failed: $e')),
+      );
+    }
+  }
 
-    if (!mounted) return;
-    setState(() => _future = _loadPending());
+  Future<void> _reject(Map<String, dynamic> b) async {
+    try {
+      await _supabase.from('sports_bookings').update({
+        'status': 'rejected',
+      }).eq('id', b['id']);
+      await _supabase.from('user_notifications').insert({
+        'user_email': b['user_email'],
+        'title': 'Sports booking rejected',
+        'body': 'Your request at ${b['arena_name']} was rejected. Please try another slot.',
+        'kind': 'sports',
+      });
+      if (!mounted) return;
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Reject failed: $e')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Sports approvals')),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _future,
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: _supabase
+            .from('sports_bookings')
+            .stream(primaryKey: ['id'])
+            .order('booking_time', ascending: true),
         builder: (context, snap) {
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-          final pending = snap.data!;
+          final all = List<Map<String, dynamic>>.from(snap.data!);
+          final pending = all.where((b) => (b['status'] ?? '') == 'pending').toList();
           if (pending.isEmpty) return const Center(child: Text('No pending bookings'));
           return ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: pending.length,
             itemBuilder: (context, i) {
               final b = pending[i];
+              final arena = (b['arena_name'] ?? '').toString();
+              final next = _nextAvailableForArena(arena, all);
               return Card(
                 child: ListTile(
-                  title: Text((b['arena_name'] ?? '').toString()),
-                  subtitle: Text('${b['user_name']} • ${b['user_email']}'),
-                  trailing: ElevatedButton(
-                    onPressed: () => _approve(b),
-                    child: const Text('Approve'),
+                  title: Text(arena),
+                  subtitle: Text(
+                    '${(b['user_email'] ?? '').toString()}\nNext available: ${_fmt(next)}',
+                  ),
+                  isThreeLine: true,
+                  trailing: Wrap(
+                    spacing: 8,
+                    children: [
+                      TextButton(
+                        onPressed: () => _reject(b),
+                        child: const Text('Reject'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _approve(b),
+                        child: const Text('Approve'),
+                      ),
+                    ],
                   ),
                 ),
               );

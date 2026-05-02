@@ -12,6 +12,7 @@ class ApplyIpPage extends StatefulWidget {
 class _ApplyIpPageState extends State<ApplyIpPage> {
   final supabase = Supabase.instance.client;
 
+  final nameController = TextEditingController();
   final emailController = TextEditingController();
   final cgController = TextEditingController();
   final descController = TextEditingController();
@@ -20,11 +21,12 @@ class _ApplyIpPageState extends State<ApplyIpPage> {
   bool _submitted = false;
 
   Future<void> submitApplication() async {
+    final name = nameController.text.trim();
     final email = emailController.text.trim().toLowerCase();
     final cgText = cgController.text.trim();
     final desc = descController.text.trim();
 
-    if (email.isEmpty || cgText.isEmpty || desc.isEmpty) {
+    if (name.isEmpty || email.isEmpty || cgText.isEmpty || desc.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill all fields")),
       );
@@ -49,7 +51,7 @@ class _ApplyIpPageState extends State<ApplyIpPage> {
       if (args is! Map) {
         throw Exception("Missing slot details");
       }
-      final slot = Map<String, dynamic>.from(args as Map);
+      final slot = Map<String, dynamic>.from(args);
       final slotId = slot['id'];
       final professorEmail = (slot['professor_email'] ?? '').toString();
       final capRaw = slot['cgpa_cap'];
@@ -70,6 +72,7 @@ class _ApplyIpPageState extends State<ApplyIpPage> {
       }
 
       await supabase.from('ip_btp_requests').insert({
+        'student_name': name,
         'student_email': email,
         'student_cg': cg,
         'description': desc,
@@ -104,6 +107,7 @@ class _ApplyIpPageState extends State<ApplyIpPage> {
 
   @override
   void dispose() {
+    nameController.dispose();
     emailController.dispose();
     cgController.dispose();
     descController.dispose();
@@ -132,6 +136,9 @@ class _ApplyIpPageState extends State<ApplyIpPage> {
   @override
   Widget build(BuildContext context) {
     final sessionEmail = SessionManager.email;
+    if (nameController.text.isEmpty) {
+      nameController.text = sessionEmail == null ? '' : sessionEmail.split('@').first;
+    }
     if (emailController.text.isEmpty && sessionEmail != null) {
       emailController.text = sessionEmail;
     }
@@ -192,6 +199,11 @@ class _ApplyIpPageState extends State<ApplyIpPage> {
                 ),
               ),
             if (slot != null) const SizedBox(height: 12),
+            buildTextField(
+              controller: nameController,
+              label: "Name",
+            ),
+            const SizedBox(height: 16),
             buildTextField(
               controller: emailController,
               label: "College Email",

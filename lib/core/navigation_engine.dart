@@ -16,6 +16,24 @@ class CampusGraph {
 
   static Iterable<String> get allNodes => _adjacency.keys;
 
+  /// Returns a human-readable node name from free-form user input.
+  static String getCanonicalPlaceName(String name) {
+    final normalized = _normalize(name);
+    if (normalized.isEmpty) return '';
+    if (_adjacency.containsKey(normalized)) {
+      return _titleCase(normalized);
+    }
+    return _titleCase(name.trim());
+  }
+
+  /// Derives a storage object key for a node street-view image.
+  /// Expected convention: "<node name>.jpg" (lowercase, spaces kept).
+  static String getImage(String nodeName) {
+    final normalized = _normalize(nodeName);
+    if (normalized.isEmpty) return '';
+    return '$normalized.jpg';
+  }
+
   /// Returns a shortest path (by number of edges) between [from] and [to],
   /// or null if either node does not exist or no path is found.
   static List<String>? shortestPath(String from, String to) {
@@ -57,5 +75,13 @@ class CampusGraph {
   }
 
   static String _normalize(String name) => name.trim().toLowerCase();
+
+  static String _titleCase(String value) {
+    return value
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase() + w.substring(1))
+        .join(' ');
+  }
 }
 

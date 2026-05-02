@@ -98,7 +98,6 @@ class CampusNavigator extends StatelessWidget {
         '/admin_activity': (context) => const StudentActivityPage(),
         '/admin_feedback': (context) => const FeedbackAdminPage(),
         '/admin_tpo': (context) => const TpoAdminPage(),
-        '/navigator': (context) => const NavigationPage(from: '', to: ''),
         '/chat_list': (context) => ChatListPage(),
         // Default demo chat screen (most real navigations use arguments)
         '/chat_screen': (context) => const ChatScreen(
@@ -128,12 +127,15 @@ class CampusNavigator extends StatelessWidget {
 
       onGenerateRoute: (settings) {
         if (settings.name == '/navigator') {
-          final args = settings.arguments as Map;
+          final args = settings.arguments;
+          final map = args is Map ? Map<String, dynamic>.from(args) : const <String, dynamic>{};
+          final from = (map['from'] ?? '').toString();
+          final to = (map['to'] ?? '').toString();
 
           return MaterialPageRoute(
             builder: (context) => NavigationPage(
-              from: args['from'],
-              to: args['to'],
+              from: from,
+              to: to,
             ),
           );
         }

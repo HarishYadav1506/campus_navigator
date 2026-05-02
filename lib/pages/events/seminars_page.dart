@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/session_manager.dart';
 
 class SeminarsPage extends StatefulWidget {
   const SeminarsPage({super.key});
@@ -29,10 +30,100 @@ class _SeminarsPageState extends State<SeminarsPage> {
         .toList();
   }
 
+  Future<void> _openAddSeminarDialog() async {
+    final titleCtrl = TextEditingController();
+    final speakerCtrl = TextEditingController();
+    final venueCtrl = TextEditingController();
+    DateTime when = DateTime.now().add(const Duration(days: 1));
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocalState) => AlertDialog(
+          title: const Text('Add seminar'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Title')),
+                const SizedBox(height: 8),
+                TextField(controller: speakerCtrl, decoration: const InputDecoration(labelText: 'Speaker')),
+                const SizedBox(height: 8),
+                TextField(controller: venueCtrl, decoration: const InputDecoration(labelText: 'Venue')),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Date and time'),
+                  subtitle: Text('${when.day}/${when.month}/${when.year}  ${when.hour.toString().padLeft(2, '0')}:${when.minute.toString().padLeft(2, '0')}'),
+                  trailing: const Icon(Icons.edit_calendar),
+                  onTap: () async {
+                    final pickedDate = await showDatePicker(
+                      context: context,
+                      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                      initialDate: when,
+                    );
+                    if (pickedDate == null) return;
+                    final pickedTime = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(when));
+                    if (pickedTime == null) return;
+                    setLocalState(() {
+                      when = DateTime(
+                        pickedDate.year,
+                        pickedDate.month,
+                        pickedDate.day,
+                        pickedTime.hour,
+                        pickedTime.minute,
+                      );
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleCtrl.text.trim().isEmpty) return;
+                await _supabase.from('seminars').insert({
+                  'title': titleCtrl.text.trim(),
+                  'speaker': speakerCtrl.text.trim(),
+                  'venue': venueCtrl.text.trim(),
+                  'date_time': when.toUtc().toIso8601String(),
+                  'created_by': SessionManager.email,
+                });
+                if (!mounted) return;
+                setState(() {
+                  _future = _loadSeminars();
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+    titleCtrl.dispose();
+    speakerCtrl.dispose();
+    venueCtrl.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final role = SessionManager.role ?? '';
+    final isProf = role == 'professor' || role == 'prof' || role == 'admin';
     return Scaffold(
-      appBar: AppBar(title: const Text('Upcoming Seminars')),
+      appBar: AppBar(
+        title: const Text('Upcoming Seminars'),
+        actions: [
+          if (isProf)
+            IconButton(
+              tooltip: 'Add seminar',
+              onPressed: _openAddSeminarDialog,
+              icon: const Icon(Icons.add),
+            ),
+        ],
+      ),
       body: FutureBuilder<List<_Seminar>>(
         future: _future,
         builder: (context, snapshot) {

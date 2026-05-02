@@ -34,9 +34,11 @@ class DashboardPage extends StatelessWidget {
             _dashCard(context, 'Sports', 'Book sports facilities', '/sports'),
           ],
           if (isProf) ...[
-            _dashCard(context, 'Admin Panel', 'Manage announcements and approvals', '/admin'),
-            _dashCard(context, 'Professor Slots', 'Create and replicate office slots', '/prof_slots'),
-            _dashCard(context, 'Events', 'Add seminars and events', '/admin_events'),
+            _dashCard(context, 'Professor Panel', 'Professor-only tools and workflows', '/prof_slots'),
+            _dashCard(context, 'Seminars', 'Create and manage seminar announcements', '/seminars'),
+            _dashCard(context, 'Classroom Chat', 'Create class code and controlled chat groups', '/chat_list'),
+            _dashCard(context, 'IP/BTP Announcements', 'Set minimum CGPA and collect applications', '/ip_btp'),
+            _dashCard(context, 'Calendar Slot Planner', 'Manage slots and copy previous day', '/book_slot'),
           ],
           if (role == 'admin') ...[
             _dashCard(context, 'Admin Panel', 'Open admin dashboard', '/admin'),
