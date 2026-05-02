@@ -11,6 +11,40 @@ class ManageSports extends StatefulWidget {
 class _ManageSportsState extends State<ManageSports> {
   final _supabase = Supabase.instance.client;
 
+  List<Map<String, dynamic>> _allBookings = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final data = await _supabase
+          .from('sports_bookings')
+          .select()
+          .order('created_at', ascending: true);
+      if (!mounted) return;
+      setState(() {
+        _allBookings = List<Map<String, dynamic>>.from(data as List);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
+    }
+  }
+
   String _fmt(DateTime dt) {
     final local = dt.toLocal();
     final hh = local.hour.toString().padLeft(2, '0');
@@ -38,23 +72,31 @@ class _ManageSportsState extends State<ManageSports> {
 
   Future<void> _approve(Map<String, dynamic> b) async {
     final now = DateTime.now().toUtc();
+    final id = b['id'];
     try {
       await _supabase.from('sports_bookings').update({
         'status': 'approved',
         'booking_time': now.toIso8601String(),
-      }).eq('id', b['id']);
+        'approved_at': now.toIso8601String(),
+      }).eq('id', id);
 
-      await _supabase.from('user_notifications').insert({
-        'user_email': b['user_email'],
-        'title': 'Sports booking approved',
-        'body': 'Your slot at ${b['arena_name']} is approved. Reach in 10 min.',
-        'kind': 'sports',
-      });
+      try {
+        await _supabase.from('user_notifications').insert({
+          'user_email': b['user_email'],
+          'title': 'Sports booking approved',
+          'body':
+              'Your slot at ${b['arena_name']} is approved. Reach in 10 min.',
+          'kind': 'sports',
+        });
+      } catch (_) {
+        // Booking update succeeded; notification is optional
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Booking approved')),
       );
+      await _reload();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -64,17 +106,25 @@ class _ManageSportsState extends State<ManageSports> {
   }
 
   Future<void> _reject(Map<String, dynamic> b) async {
+    final id = b['id'];
     try {
       await _supabase.from('sports_bookings').update({
         'status': 'rejected',
-      }).eq('id', b['id']);
-      await _supabase.from('user_notifications').insert({
-        'user_email': b['user_email'],
-        'title': 'Sports booking rejected',
-        'body': 'Your request at ${b['arena_name']} was rejected. Please try another slot.',
-        'kind': 'sports',
-      });
+      }).eq('id', id);
+      try {
+        await _supabase.from('user_notifications').insert({
+          'user_email': b['user_email'],
+          'title': 'Sports booking rejected',
+          'body':
+              'Your request at ${b['arena_name']} was rejected. Please try another slot.',
+          'kind': 'sports',
+        });
+      } catch (_) {}
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Booking rejected')),
+      );
+      await _reload();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -85,51 +135,69 @@ class _ManageSportsState extends State<ManageSports> {
 
   @override
   Widget build(BuildContext context) {
+    final all = _allBookings;
+    final pending =
+        all.where((b) => (b['status'] ?? '').toString() == 'pending').toList();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Sports approvals')),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _supabase
-            .from('sports_bookings')
-            .stream(primaryKey: ['id'])
-            .order('booking_time', ascending: true),
-        builder: (context, snap) {
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-          final all = List<Map<String, dynamic>>.from(snap.data!);
-          final pending = all.where((b) => (b['status'] ?? '') == 'pending').toList();
-          if (pending.isEmpty) return const Center(child: Text('No pending bookings'));
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: pending.length,
-            itemBuilder: (context, i) {
-              final b = pending[i];
-              final arena = (b['arena_name'] ?? '').toString();
-              final next = _nextAvailableForArena(arena, all);
-              return Card(
-                child: ListTile(
-                  title: Text(arena),
-                  subtitle: Text(
-                    '${(b['user_email'] ?? '').toString()}\nNext available: ${_fmt(next)}',
-                  ),
-                  isThreeLine: true,
-                  trailing: Wrap(
-                    spacing: 8,
-                    children: [
-                      TextButton(
-                        onPressed: () => _reject(b),
-                        child: const Text('Reject'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => _approve(b),
-                        child: const Text('Approve'),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
+      appBar: AppBar(
+        title: const Text('Sports approvals'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loading ? null : _reload,
+          ),
+        ],
       ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'Could not load bookings.\n$_error',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                )
+              : pending.isEmpty
+                  ? const Center(child: Text('No pending bookings'))
+                  : RefreshIndicator(
+                      onRefresh: _reload,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: pending.length,
+                        itemBuilder: (context, i) {
+                          final b = pending[i];
+                          final arena = (b['arena_name'] ?? '').toString();
+                          final next = _nextAvailableForArena(arena, all);
+                          return Card(
+                            child: ListTile(
+                              title: Text(arena),
+                              subtitle: Text(
+                                '${(b['user_email'] ?? '').toString()}\n'
+                                'Next available: ${_fmt(next)}',
+                              ),
+                              isThreeLine: true,
+                              trailing: Wrap(
+                                spacing: 8,
+                                children: [
+                                  TextButton(
+                                    onPressed: _loading ? null : () => _reject(b),
+                                    child: const Text('Reject'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: _loading ? null : () => _approve(b),
+                                    child: const Text('Approve'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
     );
   }
 }

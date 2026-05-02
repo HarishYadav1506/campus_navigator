@@ -18,10 +18,11 @@ class _SportsStatusPageState extends State<SportsStatusPage> {
 
   RealtimeChannel? _realtimeChannel;
   bool _loading = false;
-  Map<String, dynamic>? _arena;
   Map<String, dynamic>? _myBooking;
   List<Map<String, dynamic>> _pendingBookings = [];
   List<Map<String, dynamic>> _waitlist = [];
+  /// True when any approved/active slot for this arena is still inside its 1-hour window.
+  bool _arenaOccupied = false;
 
   String get _email => (SessionManager.email ?? '').trim().toLowerCase();
 
@@ -69,22 +70,23 @@ class _SportsStatusPageState extends State<SportsStatusPage> {
   Future<void> _load({bool silent = false}) async {
     if (!silent) setState(() => _loading = true);
     try {
-      final arena = await supabase
-          .from('sports_arenas')
-          .select()
-          .eq('name', widget.arenaName)
-          .maybeSingle();
+      final now = DateTime.now().toUtc();
 
-      final myBooking = _email.isEmpty
-          ? null
-          : await supabase
-              .from('sports_bookings')
-              .select()
-              .eq('arena_name', widget.arenaName)
-              .eq('user_email', _email)
-              .inFilter('status', ['pending', 'approved', 'active'])
-              .order('booking_time', ascending: false)
-              .maybeSingle();
+      Map<String, dynamic>? myBooking;
+      if (_email.isNotEmpty) {
+        final myRows = await supabase
+            .from('sports_bookings')
+            .select()
+            .eq('arena_name', widget.arenaName)
+            .eq('user_email', _email)
+            .inFilter('status', ['pending', 'approved', 'active'])
+            .order('created_at', ascending: false)
+            .limit(1);
+        final raw = myRows as List;
+        myBooking = raw.isEmpty
+            ? null
+            : Map<String, dynamic>.from(raw.first as Map);
+      }
 
       final pendingBookings = await supabase
           .from('sports_bookings')
@@ -92,6 +94,22 @@ class _SportsStatusPageState extends State<SportsStatusPage> {
           .eq('arena_name', widget.arenaName)
           .eq('status', 'pending')
           .order('booking_time', ascending: true);
+
+      final activeRows = await supabase
+          .from('sports_bookings')
+          .select('booking_time,status')
+          .eq('arena_name', widget.arenaName)
+          .inFilter('status', ['approved', 'active']);
+
+      var arenaOccupied = false;
+      for (final row in activeRows as List) {
+        final m = Map<String, dynamic>.from(row as Map);
+        final t = DateTime.tryParse((m['booking_time'] ?? '').toString());
+        if (t != null && t.add(const Duration(hours: 1)).isAfter(now)) {
+          arenaOccupied = true;
+          break;
+        }
+      }
 
       final waitlist = await supabase
           .from('sports_waitlist')
@@ -101,10 +119,10 @@ class _SportsStatusPageState extends State<SportsStatusPage> {
 
       if (!mounted) return;
       setState(() {
-        _arena = arena == null ? null : Map<String, dynamic>.from(arena);
-        _myBooking = myBooking == null ? null : Map<String, dynamic>.from(myBooking);
+        _myBooking = myBooking;
         _pendingBookings = List<Map<String, dynamic>>.from(pendingBookings);
         _waitlist = List<Map<String, dynamic>>.from(waitlist);
+        _arenaOccupied = arenaOccupied;
       });
     } finally {
       if (mounted && !silent) setState(() => _loading = false);
@@ -122,26 +140,28 @@ class _SportsStatusPageState extends State<SportsStatusPage> {
   }
 
   Future<void> _requestBooking() async {
-    final name = nameController.text.trim();
     if (_email.isEmpty) return;
     setState(() => _loading = true);
     try {
       await _ensureArenaRow();
       final cooldown = await supabase
           .from('sports_cooldowns')
-          .select('cooldown_until')
+          .select('blocked_until')
           .eq('user_email', _email)
           .maybeSingle();
       if (cooldown != null) {
-        final until = DateTime.tryParse('${cooldown['cooldown_until']}');
+        final until =
+            DateTime.tryParse('${cooldown['blocked_until'] ?? ''}');
         if (until != null && until.isAfter(DateTime.now().toUtc())) {
           throw Exception('Booking blocked until ${until.toLocal()}');
         }
       }
+      final requestedAt = DateTime.now().toUtc();
       await supabase.from('sports_bookings').insert({
         'arena_name': widget.arenaName,
         'user_email': _email,
         'status': 'pending',
+        'booking_time': requestedAt.toIso8601String(),
       });
       await supabase.from('sports_admin_notifications').insert({
         'arena_name': widget.arenaName,
@@ -190,6 +210,7 @@ class _SportsStatusPageState extends State<SportsStatusPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Checked in. +5 points')),
       );
+      await _load(silent: true);
     }
   }
 
@@ -203,16 +224,7 @@ class _SportsStatusPageState extends State<SportsStatusPage> {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now().toUtc();
-    final currentlyRunningApproved = _pendingBookings.isNotEmpty
-        ? false
-        : (_myBooking != null &&
-            ((_myBooking!['status'] ?? '') == 'approved' || (_myBooking!['status'] ?? '') == 'active') &&
-            DateTime.tryParse((_myBooking!['booking_time'] ?? '').toString())
-                    ?.add(const Duration(hours: 1))
-                    .isAfter(now) ==
-                true);
-    final occupied = currentlyRunningApproved;
+    final occupied = _arenaOccupied;
     final my = _myBooking;
     final myStatus = (my?['status'] ?? '').toString();
     final myPendingIndex = _pendingBookings.indexWhere((w) =>

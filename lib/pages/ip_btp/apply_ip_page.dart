@@ -78,6 +78,7 @@ class _ApplyIpPageState extends State<ApplyIpPage> {
         'description': desc,
         'slot_id': slotId,
         'professor_email': professorEmail.isEmpty ? null : professorEmail,
+        'status': 'pending',
       });
 
       emailController.clear();

@@ -14,6 +14,12 @@ class _IpBtpPageState extends State<IpBtpPage> {
   final supabase = Supabase.instance.client;
 
   List<Map<String, dynamic>> slots = [];
+  /// Applications to this professor's IP/BTP announcements (`ip_btp_requests`).
+  List<Map<String, dynamic>> _myApplications = [];
+
+  /// Logged-in student's own applications (same table, filtered by email).
+  List<Map<String, dynamic>> _myStudentApplications = [];
+  String? _requestStatusBusyId;
 
   final titleController = TextEditingController();
   final detailsController = TextEditingController();
@@ -27,6 +33,8 @@ class _IpBtpPageState extends State<IpBtpPage> {
   void initState() {
     super.initState();
     loadSlots();
+    _loadMyApplications();
+    _loadStudentApplications();
   }
 
   // LOAD SLOTS FROM SUPABASE
@@ -44,6 +52,142 @@ class _IpBtpPageState extends State<IpBtpPage> {
 
     } catch (e) {
       print("Error loading slots: $e");
+    }
+  }
+
+  String _slotTitleForId(Object? slotId) {
+    if (slotId == null) return 'Unknown slot';
+    final id = slotId.toString();
+    for (final s in slots) {
+      if (s['id'].toString() == id) {
+        return (s['title'] ?? 'Slot').toString();
+      }
+    }
+    return 'Slot $id';
+  }
+
+  /// Student applications where this prof is linked (by `professor_email` or by owning the slot).
+  Future<void> _loadMyApplications() async {
+    final role = SessionManager.role;
+    final isProf = role == 'professor' || role == 'prof';
+    if (!isProf) return;
+
+    final profEmail = (SessionManager.email ?? '').trim().toLowerCase();
+    if (profEmail.isEmpty) return;
+
+    try {
+      final byEmail = await supabase
+          .from('ip_btp_requests')
+          .select()
+          .eq('professor_email', profEmail);
+
+      final mySlotRows = await supabase
+          .from('ip_btp_slots')
+          .select('id')
+          .eq('professor_email', profEmail);
+      final slotIds = (mySlotRows as List)
+          .map((r) => (r as Map)['id'])
+          .where((id) => id != null)
+          .toList();
+
+      List<Map<String, dynamic>> bySlot = [];
+      if (slotIds.isNotEmpty) {
+        final rows = await supabase
+            .from('ip_btp_requests')
+            .select()
+            .inFilter('slot_id', slotIds);
+        bySlot = List<Map<String, dynamic>>.from(rows as List);
+      }
+
+      final emailList = List<Map<String, dynamic>>.from(byEmail as List);
+      final seen = <String>{};
+      final merged = <Map<String, dynamic>>[];
+      void addUnique(Map<String, dynamic> row) {
+        final id = (row['id'] ?? '').toString();
+        if (id.isEmpty) return;
+        if (seen.add(id)) merged.add(row);
+      }
+
+      for (final r in emailList) {
+        addUnique(Map<String, dynamic>.from(r));
+      }
+      for (final r in bySlot) {
+        addUnique(Map<String, dynamic>.from(r));
+      }
+
+      merged.sort((a, b) {
+        final ta = (a['created_at'] ?? a['id'] ?? '').toString();
+        final tb = (b['created_at'] ?? b['id'] ?? '').toString();
+        return tb.compareTo(ta);
+      });
+
+      if (!mounted) return;
+      setState(() => _myApplications = merged);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load applications: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadStudentApplications() async {
+    if (SessionManager.role != 'student') return;
+
+    final email = (SessionManager.email ?? '').trim().toLowerCase();
+    if (email.isEmpty) return;
+
+    try {
+      final rows = await supabase
+          .from('ip_btp_requests')
+          .select()
+          .eq('student_email', email)
+          .order('created_at', ascending: false);
+
+      if (!mounted) return;
+      setState(() {
+        _myStudentApplications =
+            List<Map<String, dynamic>>.from(rows as List);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load your applications: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _setApplicationStatus(String id, String status) async {
+    setState(() => _requestStatusBusyId = id);
+    try {
+      await supabase.from('ip_btp_requests').update({
+        'status': status,
+        'reviewed_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', id);
+
+      if (!mounted) return;
+      await _loadMyApplications();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            status == 'approved'
+                ? 'Application approved'
+                : 'Application rejected',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not update status: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _requestStatusBusyId = null);
+      }
     }
   }
 
@@ -95,6 +239,7 @@ class _IpBtpPageState extends State<IpBtpPage> {
       cgpaCapController.clear();
 
       await loadSlots();
+      await _loadMyApplications();
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Slot added successfully")),
@@ -139,16 +284,31 @@ class _IpBtpPageState extends State<IpBtpPage> {
           }).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text("IP / BTP")),
+      appBar: AppBar(
+        title: const Text("IP / BTP"),
+        actions: [
+          if (isProf || isStudent)
+            IconButton(
+              tooltip: isProf ? 'Refresh slots & applications' : 'Refresh',
+              onPressed: () async {
+                await loadSlots();
+                if (isProf) await _loadMyApplications();
+                if (isStudent) await _loadStudentApplications();
+              },
+              icon: const Icon(Icons.refresh),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 760),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
 
                   Row(
                     children: [
@@ -226,106 +386,56 @@ class _IpBtpPageState extends State<IpBtpPage> {
 
                   const SizedBox(height: 12),
 
+                  if (isStudent) ...[
+                    _StudentApplicationsCard(
+                      applications: _myStudentApplications,
+                      slotTitleForId: _slotTitleForId,
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+
                   // PROFESSOR FORM
                   if (isProf) ...[
                     buildProfForm(),
                     const SizedBox(height: 10),
+                    _ProfApplicationsCard(
+                      applications: _myApplications,
+                      slotTitleForId: _slotTitleForId,
+                      onDecision: _setApplicationStatus,
+                      busyRequestId: _requestStatusBusyId,
+                    ),
+                    const SizedBox(height: 10),
                   ],
 
-                  // ANNOUNCEMENT LIST
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? const Center(
-                            child: Text("No IP/BTP slots announced yet"))
-                        : ListView.builder(
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-
-                              final slot = filtered[index];
-                              final cap = slot['cgpa_cap'];
-                              final capText = cap == null ? '—' : '$cap';
-
-                              return Card(
-                                elevation: 0,
-                                color: Colors.white.withOpacity(0.06),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                  side: const BorderSide(color: Colors.white12),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 12),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              (slot['title'] ?? '').toString(),
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleMedium
-                                                  ?.copyWith(
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                            ),
-                                          ),
-                                          if (isStudent)
-                                            SizedBox(
-                                              height: 38,
-                                              child: ElevatedButton(
-                                                onPressed: () {
-
-                                                  Navigator.pushNamed(
-                                                    context,
-                                                    '/apply_ip',
-                                                    arguments: slot,
-                                                  );
-
-                                                },
-                                                child: const Text("Apply"),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        (slot['details'] ?? '').toString(),
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium
-                                            ?.copyWith(color: Colors.white70),
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          _MetaChip(
-                                            icon: Icons.person_outline,
-                                            label:
-                                                (slot['professor_email'] ?? '—')
-                                                    .toString(),
-                                          ),
-                                          _MetaChip(
-                                            icon: Icons.bar_chart_outlined,
-                                            label: "CGPA cap: $capText",
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
+                  // ANNOUNCEMENT LIST (scrolls with the rest of the page)
+                  if (filtered.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Center(
+                        child: Text("No IP/BTP slots announced yet"),
+                      ),
+                    )
+                  else
+                    for (var index = 0; index < filtered.length; index++) ...[
+                      if (index > 0) const SizedBox(height: 10),
+                      _IpBtpSlotCard(
+                        slot: filtered[index],
+                        isStudent: isStudent,
+                        onApply: () async {
+                          await Navigator.pushNamed(
+                            context,
+                            '/apply_ip',
+                            arguments: filtered[index],
+                          );
+                          if (mounted) {
+                            await _loadStudentApplications();
+                          }
+                        },
+                      ),
+                    ],
                 ],
               ),
+            ),
             ),
           ),
         ),
@@ -424,6 +534,373 @@ class _IpBtpPageState extends State<IpBtpPage> {
                   label: const Text("Publish announcement"),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _ipBtpRequestStatus(Map<String, dynamic> r) {
+  final s = (r['status'] ?? 'pending').toString().trim().toLowerCase();
+  if (s == 'approved' || s == 'rejected' || s == 'pending') return s;
+  return 'pending';
+}
+
+class _StudentApplicationsCard extends StatelessWidget {
+  const _StudentApplicationsCard({
+    required this.applications,
+    required this.slotTitleForId,
+  });
+
+  final List<Map<String, dynamic>> applications;
+  final String Function(Object? slotId) slotTitleForId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Colors.white.withOpacity(0.06),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Colors.white12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.assignment_outlined, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'My applications',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Chip(
+                  label: Text('${applications.length}'),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Status of your IP/BTP applications to announced slots.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.white70),
+            ),
+            const SizedBox(height: 12),
+            if (applications.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: Text(
+                    'You have not applied yet.',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: applications.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, i) {
+                  final r = applications[i];
+                  final status = _ipBtpRequestStatus(r);
+                  final title = slotTitleForId(r['slot_id']);
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 4),
+                        _IpBtpStatusChip(status: status),
+                      ],
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfApplicationsCard extends StatelessWidget {
+  const _ProfApplicationsCard({
+    required this.applications,
+    required this.slotTitleForId,
+    required this.onDecision,
+    required this.busyRequestId,
+  });
+
+  final List<Map<String, dynamic>> applications;
+  final String Function(Object? slotId) slotTitleForId;
+  final Future<void> Function(String id, String status) onDecision;
+  final String? busyRequestId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Colors.white.withOpacity(0.06),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Colors.white12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.inbox_outlined, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Student applications',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Chip(
+                  label: Text('${applications.length}'),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Applications submitted to your announcements (from ip_btp_requests).',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.white70),
+            ),
+            const SizedBox(height: 12),
+            if (applications.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: Text(
+                    'No applications yet.',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: applications.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, i) {
+                  final r = applications[i];
+                  final id = (r['id'] ?? '').toString();
+                  final name = (r['student_name'] ?? '—').toString();
+                  final email = (r['student_email'] ?? '—').toString();
+                  final cg = r['student_cg'];
+                  final desc = (r['description'] ?? '').toString();
+                  final slotId = r['slot_id'];
+                  final title = slotTitleForId(slotId);
+                  final status = _ipBtpRequestStatus(r);
+                  final busy = busyRequestId == id;
+                  // Avoid ListTile here: its fixed subtitle height overflows when
+                  // stacking email, topic, CGPA, description, chip, and actions.
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(email, style: const TextStyle(fontSize: 14)),
+                        const SizedBox(height: 2),
+                        Text('Topic: $title'),
+                        if (cg != null) ...[
+                          const SizedBox(height: 2),
+                          Text('CGPA: $cg'),
+                        ],
+                        if (desc.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            desc,
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        _IpBtpStatusChip(status: status),
+                        if (status == 'pending' && id.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          if (busy)
+                            const Align(
+                              alignment: Alignment.centerLeft,
+                              child: SizedBox(
+                                height: 28,
+                                width: 28,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            )
+                          else
+                            Wrap(
+                              spacing: 4,
+                              runSpacing: 0,
+                              alignment: WrapAlignment.end,
+                              children: [
+                                TextButton(
+                                  onPressed: () => onDecision(id, 'approved'),
+                                  child: const Text('Approve'),
+                                ),
+                                TextButton(
+                                  onPressed: () => onDecision(id, 'rejected'),
+                                  child: const Text('Reject'),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IpBtpStatusChip extends StatelessWidget {
+  const _IpBtpStatusChip({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = status[0].toUpperCase() + status.substring(1);
+    Color bg;
+    Color fg = Colors.white;
+    switch (status) {
+      case 'approved':
+        bg = Colors.green.withOpacity(0.25);
+        fg = Colors.lightGreenAccent.shade100;
+        break;
+      case 'rejected':
+        bg = Colors.red.withOpacity(0.25);
+        fg = Colors.redAccent.shade100;
+        break;
+      default:
+        bg = Colors.orange.withOpacity(0.25);
+        fg = Colors.orange.shade100;
+    }
+    return Chip(
+      label: Text(label, style: TextStyle(color: fg, fontSize: 12)),
+      backgroundColor: bg,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+}
+
+class _IpBtpSlotCard extends StatelessWidget {
+  const _IpBtpSlotCard({
+    required this.slot,
+    required this.isStudent,
+    required this.onApply,
+  });
+
+  final Map<String, dynamic> slot;
+  final bool isStudent;
+  final Future<void> Function() onApply;
+
+  @override
+  Widget build(BuildContext context) {
+    final cap = slot['cgpa_cap'];
+    final capText = cap == null ? '—' : '$cap';
+    return Card(
+      elevation: 0,
+      color: Colors.white.withOpacity(0.06),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Colors.white12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    (slot['title'] ?? '').toString(),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ),
+                if (isStudent)
+                  SizedBox(
+                    height: 38,
+                    child: ElevatedButton(
+                      onPressed: () async => onApply(),
+                      child: const Text('Apply'),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              (slot['details'] ?? '').toString(),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.white70),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _MetaChip(
+                  icon: Icons.person_outline,
+                  label: (slot['professor_email'] ?? '—').toString(),
+                ),
+                _MetaChip(
+                  icon: Icons.bar_chart_outlined,
+                  label: 'CGPA cap: $capText',
+                ),
+              ],
             ),
           ],
         ),
