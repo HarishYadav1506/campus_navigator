@@ -6,9 +6,8 @@ class AdminDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final role = SessionManager.role ?? '';
-    final canAccess = role == 'admin' || role == 'prof' || role == 'professor';
-    if (!canAccess) {
+    final role = (SessionManager.role ?? '').trim().toLowerCase();
+    if (role != 'admin') {
       return const Scaffold(
         body: Center(child: Text('Admin only')),
       );

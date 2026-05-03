@@ -69,12 +69,32 @@ class EngagementService {
     required String message,
     int? rating,
   }) async {
-    await _client.from('campus_feedback').insert({
-      'user_email': _e(email),
-      'subject': subject.trim(),
-      'message': message.trim(),
-      'rating': rating,
-    });
-    await awardPoints(email, 3, 'feedback_submitted');
+    final e = _e(email);
+    final sub = subject.trim();
+    final msg = message.trim();
+
+    // Prefer feedback_entries (admin UI + migrations); campus_feedback is optional legacy.
+    try {
+      await _client.from('feedback_entries').insert({
+        'user_email': e,
+        'feedback_type': 'app',
+        'subject': sub,
+        'message': msg,
+        'rating': rating,
+      });
+    } catch (_) {
+      await _client.from('campus_feedback').insert({
+        'user_email': e,
+        'subject': sub,
+        'message': msg,
+        'rating': rating,
+      });
+    }
+
+    try {
+      await awardPoints(email, 3, 'feedback_submitted');
+    } catch (_) {
+      // Points RPC/tables optional — feedback row should still count as success.
+    }
   }
 }

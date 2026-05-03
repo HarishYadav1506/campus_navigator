@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/profile_sync.dart';
 import '../../core/session_manager.dart';
 import '../../core/supabase_quota_support.dart';
 
@@ -67,7 +68,9 @@ class _OTPPageState extends State<OTPPage> {
         },
       );
 
-      SessionManager.setUser(newEmail: email.trim().toLowerCase(), newRole: role);
+      final em = email.trim().toLowerCase();
+      SessionManager.setUser(newEmail: em, newRole: role);
+      await ensureProfileRow(supabase, em);
 
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/home');

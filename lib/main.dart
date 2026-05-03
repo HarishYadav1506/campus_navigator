@@ -11,7 +11,6 @@ import 'pages/home/splash_page.dart';
 import 'pages/home/dashboard_page.dart';
 import 'pages/navigation/navigation_page.dart';
 import 'pages/chat/chat_list_page.dart';
-import 'pages/chat/chat_screen.dart';
 import 'pages/chat/create_group_page.dart';
 import 'pages/calendar/calendar_page.dart';
 import 'pages/calendar/book_slot_page.dart';
@@ -98,14 +97,9 @@ class CampusNavigator extends StatelessWidget {
         '/admin_activity': (context) => const StudentActivityPage(),
         '/admin_feedback': (context) => const FeedbackAdminPage(),
         '/admin_tpo': (context) => const TpoAdminPage(),
-        '/chat_list': (context) => ChatListPage(),
-        // Default demo chat screen (most real navigations use arguments)
-        '/chat_screen': (context) => const ChatScreen(
-              chatId: 'demo',
-              chatName: 'Campus Announcements',
-              currentUserEmail: 'demo@iiitd.ac.in',
-              isGroup: true,
-            ),
+        '/chat_list': (context) => const ChatListPage(),
+        // Legacy route: no global announcement chat — send users to code-based chats.
+        '/chat_screen': (context) => const ChatListPage(),
         '/create_group': (context) => const CreateGroupPage(),
         '/calendar': (context) => const CalendarPage(),
         '/book_slot': (context) => const BookSlotPage(),

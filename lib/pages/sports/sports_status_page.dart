@@ -24,7 +24,48 @@ class _SportsStatusPageState extends State<SportsStatusPage> {
   /// True when any approved/active slot for this arena is still inside its 1-hour window.
   bool _arenaOccupied = false;
 
+  /// Set when this user already has a sports booking elsewhere (or pending) that blocks a new one.
+  String? _globalSportsBlockReason;
+
   String get _email => (SessionManager.email ?? '').trim().toLowerCase();
+
+  Future<String?> _computeGlobalSportsBlockReason() async {
+    if (_email.isEmpty) return null;
+    try {
+      final rows =
+          await supabase.from('sports_bookings').select().eq('user_email', _email);
+      final now = DateTime.now().toUtc();
+      for (final raw in rows as List) {
+        final r = Map<String, dynamic>.from(raw as Map);
+        final st = (r['status'] ?? '').toString();
+        if (st == 'rejected') continue;
+        final arena = (r['arena_name'] ?? '').toString();
+        if (st == 'pending') {
+          return 'You already have a pending sports request'
+              '${arena.isNotEmpty ? " ($arena)" : ""}. '
+              'Wait until it is approved, rejected, or expires before booking another facility.';
+        }
+        if (st == 'approved' || st == 'active') {
+          final bt = DateTime.tryParse((r['booking_time'] ?? '').toString());
+          if (bt == null) {
+            return 'You have an active sports booking'
+                '${arena.isNotEmpty ? " at $arena" : ""}. '
+                'You can book again after that slot ends.';
+          }
+          final end = bt.add(const Duration(hours: 1));
+          if (end.isAfter(now)) {
+            final localEnd = end.toLocal();
+            return 'You already have a booking in progress'
+                '${arena.isNotEmpty ? " ($arena)" : ""} until '
+                '${localEnd.hour.toString().padLeft(2, '0')}:'
+                '${localEnd.minute.toString().padLeft(2, '0')}. '
+                'You can request another arena only after it ends or is rejected.';
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
 
   @override
   void initState() {
@@ -117,12 +158,15 @@ class _SportsStatusPageState extends State<SportsStatusPage> {
           .eq('arena_name', widget.arenaName)
           .order('created_at', ascending: true);
 
+      final globalBlock = await _computeGlobalSportsBlockReason();
+
       if (!mounted) return;
       setState(() {
         _myBooking = myBooking;
         _pendingBookings = List<Map<String, dynamic>>.from(pendingBookings);
         _waitlist = List<Map<String, dynamic>>.from(waitlist);
         _arenaOccupied = arenaOccupied;
+        _globalSportsBlockReason = globalBlock;
       });
     } finally {
       if (mounted && !silent) setState(() => _loading = false);
@@ -143,6 +187,11 @@ class _SportsStatusPageState extends State<SportsStatusPage> {
     if (_email.isEmpty) return;
     setState(() => _loading = true);
     try {
+      final block = await _computeGlobalSportsBlockReason();
+      if (block != null) {
+        throw Exception(block);
+      }
+
       await _ensureArenaRow();
       final cooldown = await supabase
           .from('sports_cooldowns')
@@ -240,6 +289,28 @@ class _SportsStatusPageState extends State<SportsStatusPage> {
           children: [
             if (_loading) const LinearProgressIndicator(minHeight: 2),
             if (_loading) const SizedBox(height: 8),
+            if (_globalSportsBlockReason != null) ...[
+              Card(
+                color: Colors.orange.withValues(alpha: 0.15),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.info_outline, color: Colors.orange),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _globalSportsBlockReason!,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
             Card(
               child: ListTile(
                 leading: Icon(occupied ? Icons.lock_clock : Icons.check_circle_outline),
@@ -268,7 +339,9 @@ class _SportsStatusPageState extends State<SportsStatusPage> {
             ),
             const SizedBox(height: 10),
             ElevatedButton.icon(
-              onPressed: _loading ? null : _requestBooking,
+              onPressed: _loading || _globalSportsBlockReason != null
+                  ? null
+                  : _requestBooking,
               icon: const Icon(Icons.event_available),
               label: const Text('Request booking'),
             ),

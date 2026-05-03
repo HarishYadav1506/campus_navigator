@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/profile_sync.dart';
 import '../../core/session_manager.dart';
 import '../../core/supabase_quota_support.dart';
 
@@ -12,6 +13,9 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  /// Administrator bypass password (not shown in UI).
+  static const String _adminPassword = 'admin123';
+
   final email = TextEditingController();
   final password = TextEditingController();
   final FocusNode _emailFocus = FocusNode();
@@ -20,8 +24,46 @@ class _LoginPageState extends State<LoginPage> {
   final supabase = Supabase.instance.client;
   bool _loading = false;
   bool _hidePassword = true;
+  bool _adminMode = false;
+
+  Future<void> _loginAsAdmin() async {
+    if (password.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter administrator password')),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      if (password.text != _adminPassword) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Incorrect password')),
+        );
+        return;
+      }
+      SessionManager.setUser(
+        newEmail: 'admin@campus.local',
+        newRole: 'admin',
+      );
+      await ensureProfileRow(supabase, 'admin@campus.local');
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/admin');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Logged in as administrator')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   Future<void> login() async {
+    if (_adminMode) {
+      await _loginAsAdmin();
+      return;
+    }
+
     if (email.text.isEmpty || password.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Enter email and password")),
@@ -40,6 +82,7 @@ class _LoginPageState extends State<LoginPage> {
       if (email.text == 'demo@iiitd.ac.in' && password.text == 'password123') {
         const role = 'student';
         SessionManager.setUser(newEmail: email.text, newRole: role);
+        await ensureProfileRow(supabase, email.text);
         if (!mounted) return;
         Navigator.pushReplacementNamed(context, '/home');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -48,14 +91,15 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      // Admin login (admin_login table + password admin123)
+      // Admin login (email listed in admin_login table + same admin password)
       final adminRes = await supabase
           .from('admin_login')
           .select('email')
           .eq('email', normalizedEmail)
           .maybeSingle();
-      if (adminRes != null && password.text == 'admin123') {
+      if (adminRes != null && password.text == _adminPassword) {
         SessionManager.setUser(newEmail: normalizedEmail, newRole: 'admin');
+        await ensureProfileRow(supabase, normalizedEmail);
         if (!mounted) return;
         Navigator.pushReplacementNamed(context, '/admin');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -83,6 +127,7 @@ class _LoginPageState extends State<LoginPage> {
       //    It is set at signup time by checking "professors_login".
       final role = ((userRes['role'] as String?) ?? 'student').trim().toLowerCase();
       SessionManager.setUser(newEmail: normalizedEmail, newRole: role);
+      await ensureProfileRow(supabase, normalizedEmail);
 
       if (!mounted) return;
 
@@ -159,24 +204,28 @@ class _LoginPageState extends State<LoginPage> {
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
-                        'Sign in with your college email to continue.',
-                        style: TextStyle(color: Colors.white70),
+                      Text(
+                        _adminMode
+                            ? 'Administrator access — college email is not required.'
+                            : 'Sign in with your college email and password.',
+                        style: const TextStyle(color: Colors.white70),
                       ),
                       const SizedBox(height: 16),
-                      TextField(
-                        controller: email,
-                        focusNode: _emailFocus,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        onSubmitted: (_) => _passwordFocus.requestFocus(),
-                        decoration: const InputDecoration(
-                          labelText: "Email",
-                          hintText: "you@college.edu",
-                          border: OutlineInputBorder(),
+                      if (!_adminMode) ...[
+                        TextField(
+                          controller: email,
+                          focusNode: _emailFocus,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          onSubmitted: (_) => _passwordFocus.requestFocus(),
+                          decoration: const InputDecoration(
+                            labelText: "Email",
+                            hintText: "you@college.edu",
+                            border: OutlineInputBorder(),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
+                      ],
                       TextField(
                         controller: password,
                         focusNode: _passwordFocus,
@@ -186,16 +235,37 @@ class _LoginPageState extends State<LoginPage> {
                           if (!_loading) login();
                         },
                         decoration: InputDecoration(
-                          labelText: "Password",
+                          labelText:
+                              _adminMode ? 'Administrator password' : 'Password',
                           border: const OutlineInputBorder(),
                           suffixIcon: IconButton(
                             tooltip: _hidePassword ? 'Show password' : 'Hide password',
-                            onPressed: () => setState(() => _hidePassword = !_hidePassword),
-                            icon: Icon(_hidePassword ? Icons.visibility : Icons.visibility_off),
+                            onPressed: () =>
+                                setState(() => _hidePassword = !_hidePassword),
+                            icon: Icon(_hidePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: _loading
+                            ? null
+                            : () {
+                                setState(() {
+                                  _adminMode = !_adminMode;
+                                  email.clear();
+                                  password.clear();
+                                });
+                              },
+                        child: Text(
+                          _adminMode
+                              ? 'Sign in with college email instead'
+                              : 'Administrator sign-in',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -209,7 +279,7 @@ class _LoginPageState extends State<LoginPage> {
                                     valueColor: AlwaysStoppedAnimation(Colors.white),
                                   ),
                                 )
-                              : const Text("Login"),
+                              : Text(_adminMode ? 'Continue' : 'Login'),
                         ),
                       ),
                     ],

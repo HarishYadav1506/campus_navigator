@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/session_manager.dart';
+
 class ManageSports extends StatefulWidget {
   const ManageSports({super.key});
 
@@ -135,6 +137,24 @@ class _ManageSportsState extends State<ManageSports> {
 
   @override
   Widget build(BuildContext context) {
+    final role = (SessionManager.role ?? '').trim().toLowerCase();
+    final canApprove =
+        role == 'admin' || role == 'prof' || role == 'professor';
+    if (!canApprove) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Sports approvals')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Only administrators and professors can approve sports bookings.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
+
     final all = _allBookings;
     final pending =
         all.where((b) => (b['status'] ?? '').toString() == 'pending').toList();

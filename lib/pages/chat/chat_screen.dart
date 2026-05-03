@@ -40,7 +40,10 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _pinned = false;
   String _search = '';
 
-  bool get _isStudent => (SessionManager.role ?? '') == 'student';
+  bool get _isStudent {
+    final r = (SessionManager.role ?? '').trim().toLowerCase();
+    return r == 'student';
+  }
 
   bool get _canStudentSend {
     if (!_isStudent) return true;
@@ -55,8 +58,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final start = widget.officeHoursStart;
     final end = widget.officeHoursEnd;
     if (start == null || end == null) return true;
-    final now = DateTime.now();
-    return now.isAfter(start) && now.isBefore(end);
+    final now = DateTime.now().toUtc();
+    return now.isAfter(start.toUtc()) && now.isBefore(end.toUtc());
   }
 
   Future<void> _sendMessage() async {

@@ -57,7 +57,12 @@ class _FeedbackAdminPageState extends State<FeedbackAdminPage> {
                 (f) => Card(
                   child: ListTile(
                     title: Text('${f['feedback_type']} • ${f['subject']}'),
-                    subtitle: Text('${f['user_email']}\n${f['message']}'),
+                    subtitle: Text(
+                      '${f['user_email']}'
+                      '${f['course_code'] != null ? '\nCourse: ${f['course_code']}' : ''}'
+                      '${f['professor_email'] != null ? '\nProf: ${f['professor_email']}' : ''}'
+                      '\n${f['message']}',
+                    ),
                     isThreeLine: true,
                   ),
                 ),

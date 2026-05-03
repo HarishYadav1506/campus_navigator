@@ -10,6 +10,7 @@ class FeedbackService {
     required String subject,
     required String message,
     String? courseCode,
+    String? professorEmail,
     int? rating,
   }) async {
     await _client.from('feedback_entries').insert({
@@ -18,8 +19,22 @@ class FeedbackService {
       'subject': subject,
       'message': message,
       'course_code': courseCode,
+      'professor_email': professorEmail?.trim().toLowerCase(),
       'rating': rating,
     });
+  }
+
+  Future<List<Map<String, dynamic>>> fetchForProfessor(
+    String professorEmail,
+  ) async {
+    final e = professorEmail.trim().toLowerCase();
+    final rows = await _client
+        .from('feedback_entries')
+        .select()
+        .eq('feedback_type', 'course')
+        .eq('professor_email', e)
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(rows as List);
   }
 
   Future<List<Map<String, dynamic>>> fetch({String? type}) async {

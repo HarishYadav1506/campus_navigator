@@ -454,7 +454,7 @@ class HomePage extends StatelessWidget {
                             ),
                             _ActionTile(
                               icon: Icons.chat_bubble_outline,
-                              label: "Chat",
+                              label: "Chats",
                               onTap: () {
                                 Navigator.pushNamed(context, '/chat_list');
                               },
@@ -497,8 +497,8 @@ class HomePage extends StatelessWidget {
                         ),
                         _ServiceRow(
                           icon: Icons.chat_bubble_outline,
-                          title: "Office Hour Chat",
-                          subtitle: "Students can send doubts only in office hours",
+                          title: "Course & office chats",
+                          subtitle: "Join with a code; office hours unlock for one hour",
                           onTap: () => Navigator.pushNamed(context, '/chat_list'),
                         ),
                         _ServiceRow(
