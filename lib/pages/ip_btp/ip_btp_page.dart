@@ -258,6 +258,149 @@ class _IpBtpPageState extends State<IpBtpPage> {
     });
   }
 
+  Future<void> _deleteSlot(Map<String, dynamic> slot) async {
+    final id = (slot['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete announcement'),
+        content: const Text(
+          'Are you sure you want to delete this IP/BTP announcement?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    try {
+      await supabase.from('ip_btp_slots').delete().eq('id', id);
+      if (!mounted) return;
+      await loadSlots();
+      await _loadMyApplications();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Announcement deleted')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete: $e')),
+      );
+    }
+  }
+
+  Future<void> _showEditSlotDialog(Map<String, dynamic> slot) async {
+    final id = (slot['id'] ?? '').toString();
+    if (id.isEmpty) return;
+
+    final titleCtrl = TextEditingController(text: (slot['title'] ?? '').toString());
+    final detailsCtrl =
+        TextEditingController(text: (slot['details'] ?? '').toString());
+    final capCtrl = TextEditingController(
+      text: (slot['cgpa_cap'] ?? '').toString(),
+    );
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Update announcement'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Title',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: detailsCtrl,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Details',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: capCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'CGPA cap (0-10)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final t = titleCtrl.text.trim();
+                      final d = detailsCtrl.text.trim();
+                      final cap = double.tryParse(capCtrl.text.trim());
+                      if (t.isEmpty || d.isEmpty || cap == null || cap < 0 || cap > 10) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Enter valid title, details, and CGPA cap'),
+                          ),
+                        );
+                        return;
+                      }
+                      setLocal(() => saving = true);
+                      try {
+                        await supabase.from('ip_btp_slots').update({
+                          'title': t,
+                          'details': d,
+                          'cgpa_cap': cap,
+                        }).eq('id', id);
+                        if (!mounted) return;
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        await loadSlots();
+                        await _loadMyApplications();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Announcement updated')),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Could not update: $e')),
+                        );
+                      } finally {
+                        if (ctx.mounted) {
+                          setLocal(() => saving = false);
+                        }
+                      }
+                    },
+              child: Text(saving ? 'Saving...' : 'Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     titleController.dispose();
@@ -418,20 +561,35 @@ class _IpBtpPageState extends State<IpBtpPage> {
                   else
                     for (var index = 0; index < filtered.length; index++) ...[
                       if (index > 0) const SizedBox(height: 10),
-                      _IpBtpSlotCard(
-                        slot: filtered[index],
-                        isStudent: isStudent,
-                        onApply: () async {
-                          await Navigator.pushNamed(
-                            context,
-                            '/apply_ip',
-                            arguments: filtered[index],
-                          );
-                          if (mounted) {
-                            await _loadStudentApplications();
-                          }
-                        },
-                      ),
+                      (() {
+                        final slot = filtered[index];
+                        final owner = (slot['professor_email'] ?? '')
+                            .toString()
+                            .trim()
+                            .toLowerCase();
+                        final me =
+                            (SessionManager.email ?? '').trim().toLowerCase();
+                        final canEdit = isProf && owner.isNotEmpty && owner == me;
+                        return _IpBtpSlotCard(
+                          slot: slot,
+                          isStudent: isStudent,
+                          canEdit: canEdit,
+                          onEdit: canEdit
+                              ? () => _showEditSlotDialog(slot)
+                              : null,
+                          onDelete: canEdit ? () => _deleteSlot(slot) : null,
+                          onApply: () async {
+                            await Navigator.pushNamed(
+                              context,
+                              '/apply_ip',
+                              arguments: slot,
+                            );
+                            if (mounted) {
+                              await _loadStudentApplications();
+                            }
+                          },
+                        );
+                      })(),
                     ],
                 ],
               ),
@@ -835,11 +993,17 @@ class _IpBtpSlotCard extends StatelessWidget {
   const _IpBtpSlotCard({
     required this.slot,
     required this.isStudent,
+    required this.canEdit,
+    this.onEdit,
+    this.onDelete,
     required this.onApply,
   });
 
   final Map<String, dynamic> slot;
   final bool isStudent;
+  final bool canEdit;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
   final Future<void> Function() onApply;
 
   @override
@@ -869,6 +1033,24 @@ class _IpBtpSlotCard extends StatelessWidget {
                         ),
                   ),
                 ),
+                if (canEdit)
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (value) {
+                      if (value == 'edit') onEdit?.call();
+                      if (value == 'delete') onDelete?.call();
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: Text('Update details'),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Delete'),
+                      ),
+                    ],
+                  ),
                 if (isStudent)
                   SizedBox(
                     height: 38,

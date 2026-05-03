@@ -17,8 +17,6 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _loading = false;
 
   String get _email => (SessionManager.email ?? '').trim().toLowerCase();
-  bool get _isProf =>
-      SessionManager.role == 'prof' || SessionManager.role == 'professor';
 
   Future<void> _updateName() async {
     if (_name.text.trim().isEmpty) return;
@@ -71,7 +69,16 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        title: const Text('Settings'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Home',
+          onPressed: () {
+            Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
+          },
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -109,18 +116,11 @@ class _SettingsPageState extends State<SettingsPage> {
             onPressed: _loading ? null : _updatePassword,
             child: const Text('Update password'),
           ),
-          const SizedBox(height: 12),
-          if (_isProf)
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/admin'),
-              icon: const Icon(Icons.admin_panel_settings_outlined),
-              label: const Text('Open admin panel'),
-            ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: () {
               SessionManager.clear();
-              Navigator.pushNamedAndRemoveUntil(context, '/auth', (_) => false);
+              Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
             },
             icon: const Icon(Icons.logout),
             label: const Text('Logout'),

@@ -323,6 +323,10 @@ create table if not exists public.sports_cooldowns (
   blocked_until timestamptz not null
 );
 
+-- Older DBs may lack this column even if the table exists.
+alter table public.sports_cooldowns
+  add column if not exists blocked_until timestamptz;
+
 update public.sports_bookings
 set booking_time = coalesce(booking_time, created_at)
 where booking_time is null;

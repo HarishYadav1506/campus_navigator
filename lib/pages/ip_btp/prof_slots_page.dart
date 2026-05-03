@@ -19,6 +19,8 @@ class _ProfSlotsPageState extends State<ProfSlotsPage> {
   final _day = TextEditingController();
   final _start = TextEditingController();
   final _end = TextEditingController();
+  final _copyFromDay = TextEditingController();
+  final _copyToDay = TextEditingController();
 
   List<Map<String, dynamic>> _slots = [];
   List<Map<String, dynamic>> _bookings = [];
@@ -85,27 +87,92 @@ class _ProfSlotsPageState extends State<ProfSlotsPage> {
     await _load();
   }
 
+  Future<void> _copySlotsBetweenDays() async {
+    final fromDay = _copyFromDay.text.trim();
+    final toDay = _copyToDay.text.trim();
+    if (fromDay.isEmpty || toDay.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter source and target day')),
+      );
+      return;
+    }
+    if (fromDay.toLowerCase() == toDay.toLowerCase()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Source and target day must be different')),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      final sourceSlots = _slots.where((s) {
+        final prof = (s['prof_email'] ?? '').toString().trim().toLowerCase();
+        final day = (s['day'] ?? '').toString().trim().toLowerCase();
+        return prof == _email && day == fromDay.toLowerCase();
+      }).toList();
+
+      if (sourceSlots.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No slots found on source day')),
+        );
+        return;
+      }
+
+      for (final slot in sourceSlots) {
+        await _supabase.from('prof_slots').insert({
+          'prof_email': _email,
+          'prof_name': (slot['prof_name'] ?? _email).toString(),
+          'day': toDay,
+          'start_time': (slot['start_time'] ?? '').toString(),
+          'end_time': (slot['end_time'] ?? '').toString(),
+          'is_open': true,
+        });
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Copied ${sourceSlots.length} slot(s) from $fromDay to $toDay',
+          ),
+        ),
+      );
+      await _load();
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   Future<void> _book(Map<String, dynamic> slot) async {
+    final slotId = slot['id'];
+    final occupied = await _supabase
+        .from('prof_slot_bookings')
+        .select('id')
+        .eq('slot_id', slotId)
+        .eq('status', 'approved')
+        .limit(1);
+    if ((occupied as List).isNotEmpty) {
+      throw Exception('This slot is already booked');
+    }
+
     await _supabase.from('prof_slot_bookings').insert({
-      'slot_id': slot['id'],
+      'slot_id': slotId,
       'student_email': _email,
-      'status': 'requested',
-    });
-    await _supabase.from('approval_requests').insert({
-      'request_type': 'prof_slot',
-      'reference_id': slot['id'].toString(),
-      'requester_email': _email,
-      'status': 'pending',
+      'status': 'approved',
+      'reviewed_at': DateTime.now().toUtc().toIso8601String(),
     });
     await _activity.log(
       userEmail: _email,
-      action: 'slot_request',
-      meta: {'slot_id': slot['id'].toString()},
+      action: 'slot_booked',
+      meta: {'slot_id': slotId.toString()},
     );
     await _load();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Slot requested. Waiting for professor approval.')),
+      const SnackBar(content: Text('Slot booked successfully.')),
     );
   }
 
@@ -129,6 +196,8 @@ class _ProfSlotsPageState extends State<ProfSlotsPage> {
     _day.dispose();
     _start.dispose();
     _end.dispose();
+    _copyFromDay.dispose();
+    _copyToDay.dispose();
     super.dispose();
   }
 
@@ -187,6 +256,44 @@ class _ProfSlotsPageState extends State<ProfSlotsPage> {
               onPressed: _loading ? null : _createSlot,
               child: Text(_loading ? 'Saving...' : 'Create slot'),
             ),
+            const SizedBox(height: 12),
+            const Text(
+              'Copy slots (previous day style)',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _copyFromDay,
+                    decoration: const InputDecoration(
+                      labelText: 'From day',
+                      hintText: 'Monday',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _copyToDay,
+                    decoration: const InputDecoration(
+                      labelText: 'To day',
+                      hintText: 'Tuesday',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: _loading ? null : _copySlotsBetweenDays,
+                icon: const Icon(Icons.content_copy_outlined),
+                label: const Text('Copy day slots'),
+              ),
+            ),
             const SizedBox(height: 14),
           ],
           const Text('Available slots', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -205,7 +312,7 @@ class _ProfSlotsPageState extends State<ProfSlotsPage> {
                       )
                     : ElevatedButton(
                         onPressed: open ? () => _book(slot) : null,
-                        child: const Text('Request'),
+                        child: const Text('Book'),
                       ),
               ),
             );
@@ -237,7 +344,7 @@ class _ProfSlotsPageState extends State<ProfSlotsPage> {
                     ),
                   )),
           ] else ...[
-            const Text('My slot requests', style: TextStyle(fontWeight: FontWeight.w700)),
+            const Text('My booked slots', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             ...myBookings.take(10).map((b) => Card(
                   child: ListTile(

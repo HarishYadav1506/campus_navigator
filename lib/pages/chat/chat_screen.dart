@@ -13,6 +13,7 @@ class ChatScreen extends StatefulWidget {
   final int? messageEndHour;
   final DateTime? officeHoursStart;
   final DateTime? officeHoursEnd;
+  final String createdByEmail;
 
   const ChatScreen({
     super.key,
@@ -26,6 +27,7 @@ class ChatScreen extends StatefulWidget {
     this.messageEndHour,
     this.officeHoursStart,
     this.officeHoursEnd,
+    this.createdByEmail = '',
   });
 
   @override
@@ -43,6 +45,11 @@ class _ChatScreenState extends State<ChatScreen> {
   bool get _isStudent {
     final r = (SessionManager.role ?? '').trim().toLowerCase();
     return r == 'student';
+  }
+
+  bool get _isProf {
+    final r = (SessionManager.role ?? '').trim().toLowerCase();
+    return r == 'prof' || r == 'professor';
   }
 
   bool get _canStudentSend {
@@ -84,6 +91,76 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<String?> _currentProfileId() async {
+    final email = widget.currentUserEmail.trim().toLowerCase();
+    if (email.isEmpty) return null;
+    final me = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+    if (me == null) return null;
+    return me['id']?.toString();
+  }
+
+  Future<void> _leaveChat() async {
+    final email = widget.currentUserEmail.trim().toLowerCase();
+    final profOwnsRoom =
+        _isProf && widget.createdByEmail.trim().toLowerCase() == email;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave chat'),
+        content: Text(
+          profOwnsRoom
+              ? 'You are the professor for this room. Leaving will delete this chat room for everyone. Continue?'
+              : 'Leave this chat room?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(profOwnsRoom ? 'Delete room' : 'Leave'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    try {
+      if (profOwnsRoom) {
+        await supabase.from('chat_rooms').delete().eq('id', widget.chatId);
+      } else {
+        final profileId = await _currentProfileId();
+        if (profileId == null) throw Exception('Profile not found');
+        await supabase
+            .from('chat_room_members')
+            .delete()
+            .eq('room_id', widget.chatId)
+            .eq('user_id', profileId);
+      }
+      if (!mounted) return;
+      Navigator.pop(context, true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            profOwnsRoom
+                ? 'Professor left. Room deleted.'
+                : 'You left the chat room.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not leave chat: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final msgStream = supabase
@@ -98,7 +175,7 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
+                color: Colors.white.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -134,6 +211,11 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.exit_to_app),
+            tooltip: 'Leave chat',
+            onPressed: _leaveChat,
+          ),
           IconButton(
             icon: Icon(_muted ? Icons.notifications_off : Icons.notifications),
             tooltip: _muted ? "Unmute" : "Mute chat",
@@ -220,7 +302,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         decoration: BoxDecoration(
-                          color: isMe ? Colors.indigo : Colors.white.withOpacity(0.08),
+                          color: isMe ? Colors.indigo : Colors.white.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(

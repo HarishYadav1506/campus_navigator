@@ -106,7 +106,7 @@ class CampusNavigator extends StatelessWidget {
         '/ip_btp': (context) => const IpBtpPage(),
         '/prof_slots': (context) => const ProfSlotsPage(),
         '/apply_ip': (context) => const ApplyIpPage(),
-        '/sports': (context) => SportsPage(),
+        '/sports': (context) => const SportsPage(),
         '/tpo': (context) => const TpoPage(),
         '/feedback': (context) => const FeedbackPage(),
         '/notifications': (context) => const NotificationsPage(),

@@ -48,15 +48,9 @@ class AdminDashboard extends StatelessWidget {
           ),
           _AdminTile(
             icon: Icons.sports_soccer_outlined,
-            title: 'Sports approvals',
-            subtitle: 'Approve queued sports bookings',
+            title: 'Sports',
+            subtitle: 'Approve bookings and block users from requesting',
             onTap: () => Navigator.pushNamed(context, '/admin_sports'),
-          ),
-          _AdminTile(
-            icon: Icons.approval_outlined,
-            title: 'Request approvals',
-            subtitle: 'Approve or reject pending requests',
-            onTap: () => Navigator.pushNamed(context, '/admin_approvals'),
           ),
           _AdminTile(
             icon: Icons.monitor_heart_outlined,
@@ -69,12 +63,6 @@ class AdminDashboard extends StatelessWidget {
             title: 'View feedback',
             subtitle: 'Course/app feedback with filtering',
             onTap: () => Navigator.pushNamed(context, '/admin_feedback'),
-          ),
-          _AdminTile(
-            icon: Icons.work_outline,
-            title: 'TPO postings',
-            subtitle: 'Add placements and internships',
-            onTap: () => Navigator.pushNamed(context, '/admin_tpo'),
           ),
         ],
       ),

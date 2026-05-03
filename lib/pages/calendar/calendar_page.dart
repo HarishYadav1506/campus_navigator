@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../core/session_manager.dart';
+import '../../services/activity_service.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -9,59 +12,348 @@ class CalendarPage extends StatefulWidget {
 }
 
 class _CalendarPageState extends State<CalendarPage> {
+  final _supabase = Supabase.instance.client;
+  late final _activity = ActivityService(_supabase);
+
   DateTime _selectedDay = DateTime.now();
-  final Map<String, List<_DaySlot>> _slots = {};
+  final TextEditingController _profSearch = TextEditingController();
 
-  String _keyForDate(DateTime date) =>
-      "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+  /// All `prof_slots` rows for the selected weekday (e.g. Monday).
+  List<Map<String, dynamic>> _daySlots = [];
+  final Map<String, Map<String, dynamic>> _approvedBookingBySlotId = {};
+  bool _loading = false;
 
-  bool get _isProf => SessionManager.role == 'prof' || SessionManager.role == 'professor';
+  String get _email => (SessionManager.email ?? '').trim().toLowerCase();
 
-  void _addSlot() {
-    final key = _keyForDate(_selectedDay);
-    setState(() {
-      _slots.putIfAbsent(key, () => []);
-      _slots[key]!.add(
-        _DaySlot(
-          title: _isProf ? 'Office hour / class' : 'Meeting / class',
-          startHour: 10,
-          endHour: 11,
-        ),
-      );
-    });
+  bool get _isProf {
+    final r = (SessionManager.role ?? '').trim().toLowerCase();
+    return r == 'prof' || r == 'professor';
   }
 
-  void _copyPreviousDayToToday() {
-    final prev = _selectedDay.subtract(const Duration(days: 1));
-    final prevKey = _keyForDate(prev);
-    final currentKey = _keyForDate(_selectedDay);
-    final prevSlots = _slots[prevKey] ?? [];
-    if (prevSlots.isEmpty) {
+  static String _weekdayName(DateTime d) {
+    const names = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    return names[d.weekday - 1];
+  }
+
+  static String _shortWeekday(DateTime d) {
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return labels[d.weekday - 1];
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _profSearch.addListener(() => setState(() {}));
+    _loadSlotsForSelectedDay();
+  }
+
+  @override
+  void dispose() {
+    _profSearch.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSlotsForSelectedDay() async {
+    setState(() => _loading = true);
+    try {
+      final day = _weekdayName(_selectedDay);
+      final rows = await _supabase
+          .from('prof_slots')
+          .select()
+          .eq('day', day)
+          .order('start_time', ascending: true);
+      final slots = List<Map<String, dynamic>>.from(rows as List);
+      final slotIds = slots.map((s) => s['id']).whereType<Object>().toList();
+      final bookings = slotIds.isEmpty
+          ? <Map<String, dynamic>>[]
+          : List<Map<String, dynamic>>.from(
+              await _supabase
+                  .from('prof_slot_bookings')
+                  .select('id,slot_id,student_email,status')
+                  .inFilter('slot_id', slotIds)
+                  .eq('status', 'approved'),
+            );
+      final bySlot = <String, Map<String, dynamic>>{};
+      for (final b in bookings) {
+        final sid = (b['slot_id'] ?? '').toString();
+        if (sid.isEmpty || bySlot.containsKey(sid)) continue;
+        bySlot[sid] = b;
+      }
+      if (!mounted) return;
+      setState(() {
+        _daySlots = slots;
+        _approvedBookingBySlotId
+          ..clear()
+          ..addAll(bySlot);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load slots: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  List<Map<String, dynamic>> get _visibleSlots {
+    if (_isProf) return _daySlots;
+    final q = _profSearch.text.trim().toLowerCase();
+    if (q.isEmpty) return _daySlots;
+    return _daySlots.where((s) {
+      final label =
+          '${s['prof_name'] ?? ''} ${s['prof_email'] ?? ''}'.toLowerCase();
+      return label.contains(q);
+    }).toList();
+  }
+
+  bool get _canRequestSlots => !_isProf;
+
+  Future<void> _requestSlot(Map<String, dynamic> slot) async {
+    if (_email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No slots found on previous day')),
+        const SnackBar(content: Text('Please log in to book')),
       );
       return;
     }
-    setState(() {
-      _slots[currentKey] = prevSlots
-          .map((s) => _DaySlot(title: s.title, startHour: s.startHour, endHour: s.endHour))
-          .toList();
-    });
+    final open = (slot['is_open'] ?? true) == true;
+    if (!open) return;
+
+    try {
+      final slotId = (slot['id'] ?? '').toString();
+      if (slotId.isEmpty) {
+        throw Exception('Invalid slot');
+      }
+      final existingApproved = _approvedBookingBySlotId[slotId];
+      final bookedBy = (existingApproved?['student_email'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+      if (existingApproved != null && bookedBy == _email) {
+        await _supabase
+            .from('prof_slot_bookings')
+            .delete()
+            .eq('id', existingApproved['id']);
+        await _activity.log(
+          userEmail: _email,
+          action: 'slot_booking_removed',
+          meta: {'slot_id': slotId},
+        );
+        await _loadSlotsForSelectedDay();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Booking removed.')),
+        );
+        return;
+      }
+      if (existingApproved != null) {
+        throw Exception('This slot is already booked');
+      }
+      await _supabase.from('prof_slot_bookings').insert({
+        'slot_id': slotId,
+        'student_email': _email,
+        'status': 'approved',
+        'reviewed_at': DateTime.now().toUtc().toIso8601String(),
+      });
+      await _activity.log(
+        userEmail: _email,
+        action: 'slot_booked',
+        meta: {'slot_id': slotId.toString()},
+      );
+      await _loadSlotsForSelectedDay();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Slot booked successfully.')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not book: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _copyPreviousWeekdaySlotsForProf() async {
+    if (!_isProf || _email.isEmpty) return;
+    final prev = _selectedDay.subtract(const Duration(days: 1));
+    final fromDay = _weekdayName(prev);
+    final toDay = _weekdayName(_selectedDay);
+
+    setState(() => _loading = true);
+    try {
+      final rows = await _supabase
+          .from('prof_slots')
+          .select()
+          .eq('day', fromDay)
+          .eq('prof_email', _email);
+
+      final list = List<Map<String, dynamic>>.from(rows as List);
+      if (list.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No slots on $fromDay to copy to $toDay'),
+            ),
+          );
+        }
+        return;
+      }
+
+      for (final s in list) {
+        await _supabase.from('prof_slots').insert({
+          'prof_email': _email,
+          'prof_name': (s['prof_name'] ?? _email).toString(),
+          'day': toDay,
+          'start_time': (s['start_time'] ?? '').toString(),
+          'end_time': (s['end_time'] ?? '').toString(),
+          'is_open': true,
+        });
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Copied ${list.length} slot(s): $fromDay → $toDay'),
+          ),
+        );
+      }
+      await _loadSlotsForSelectedDay();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Copy failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _showAddSlotDialog() async {
+    if (!_isProf) return;
+    final nameCtrl = TextEditingController(
+      text: _email.split('@').first,
+    );
+    final startCtrl = TextEditingController(text: '10:00');
+    final endCtrl = TextEditingController(text: '11:00');
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add office slot'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Day: ${_weekdayName(_selectedDay)}'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Display name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: startCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Start (HH:MM)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: endCtrl,
+              decoration: const InputDecoration(
+                labelText: 'End (HH:MM)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final day = _weekdayName(_selectedDay);
+              try {
+                await _supabase.from('prof_slots').insert({
+                  'prof_email': _email,
+                  'prof_name': nameCtrl.text.trim().isEmpty
+                      ? _email
+                      : nameCtrl.text.trim(),
+                  'day': day,
+                  'start_time': startCtrl.text.trim(),
+                  'end_time': endCtrl.text.trim(),
+                  'is_open': true,
+                });
+                if (ctx.mounted) Navigator.pop(ctx);
+                await _loadSlotsForSelectedDay();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Slot created')),
+                  );
+                }
+              } catch (e) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text('Failed: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteOwnSlot(Map<String, dynamic> slot) async {
+    final owner = (slot['prof_email'] ?? '').toString().trim().toLowerCase();
+    if (owner != _email) return;
+    try {
+      await _supabase.from('prof_slots').delete().eq('id', slot['id']);
+      await _loadSlotsForSelectedDay();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Slot removed')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Delete failed: $e')),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final key = _keyForDate(_selectedDay);
-    final todaySlots = _slots[key] ?? <_DaySlot>[];
     final role = SessionManager.role ?? 'guest';
+    final visible = _visibleSlots;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Calendar & Slots')),
-      floatingActionButton: SessionManager.isLoggedIn
+      floatingActionButton: SessionManager.isLoggedIn && _isProf
           ? FloatingActionButton.extended(
-              onPressed: _addSlot,
+              onPressed: _loading ? null : _showAddSlotDialog,
               icon: const Icon(Icons.add),
-              label: const Text("Add slot"),
+              label: const Text('Add slot'),
             )
           : null,
       body: Padding(
@@ -80,41 +372,91 @@ class _CalendarPageState extends State<CalendarPage> {
               Align(
                 alignment: Alignment.centerRight,
                 child: OutlinedButton.icon(
-                  onPressed: _copyPreviousDayToToday,
+                  onPressed: _loading ? null : _copyPreviousWeekdaySlotsForProf,
                   icon: const Icon(Icons.copy_all_outlined),
-                  label: const Text('Copy previous day'),
+                  label: const Text('Copy previous calendar day'),
                 ),
               ),
             if (_isProf) const SizedBox(height: 8),
+            if (!_isProf) ...[
+              TextField(
+                controller: _profSearch,
+                decoration: const InputDecoration(
+                  hintText: 'Search professor name or email',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             Text(
-              "Slots for ${_selectedDay.day}/${_selectedDay.month}/${_selectedDay.year}",
+              "Slots for ${_selectedDay.day}/${_selectedDay.month}/${_selectedDay.year} (${_weekdayName(_selectedDay)})",
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
+            if (_loading) const LinearProgressIndicator(minHeight: 2),
+            if (_loading) const SizedBox(height: 8),
             Expanded(
-              child: todaySlots.isEmpty
-                  ? const Center(
-                      child: Text("No slots booked for this day."),
+              child: visible.isEmpty
+                  ? Center(
+                      child: Text(
+                        !_isProf && _profSearch.text.trim().isNotEmpty
+                            ? 'No professor slots match your search for this day.'
+                            : 'No professor slots for this day yet.',
+                      ),
                     )
                   : ListView.separated(
-                      itemCount: 24,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (context, index) {
-                        final active = todaySlots.where((s) => index >= s.startHour && index < s.endHour).toList();
-                        return ListTile(
-                          leading: const Icon(Icons.schedule),
-                          title: Text('${index.toString().padLeft(2, '0')}:00 - ${(index + 1).toString().padLeft(2, '0')}:00'),
-                          subtitle: active.isEmpty ? const Text("Free") : Text(active.map((e) => e.title).join(', ')),
-                          trailing: active.isEmpty
-                              ? null
-                              : IconButton(
-                                  icon: const Icon(Icons.delete_outline),
-                                  onPressed: () {
-                                    setState(() {
-                                      _slots[key]!.removeWhere((s) => index >= s.startHour && index < s.endHour);
-                                    });
-                                  },
-                                ),
+                      itemCount: visible.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, i) {
+                        final s = visible[i];
+                        final name =
+                            (s['prof_name'] ?? s['prof_email'] ?? '—').toString();
+                        final email = (s['prof_email'] ?? '').toString();
+                        final open = (s['is_open'] ?? true) == true;
+                        final mine = email.trim().toLowerCase() == _email;
+                        final slotId = (s['id'] ?? '').toString();
+                        final existingApproved = _approvedBookingBySlotId[slotId];
+                        final bookedBy = (existingApproved?['student_email'] ?? '')
+                            .toString()
+                            .trim()
+                            .toLowerCase();
+                        final bookedByMe = bookedBy.isNotEmpty && bookedBy == _email;
+                        final bookedByOther = bookedBy.isNotEmpty && bookedBy != _email;
+
+                        return Card(
+                          child: ListTile(
+                            title: Text(name),
+                            subtitle: Text(
+                              '${s['day']} • ${s['start_time']} – ${s['end_time']}\n$email',
+                            ),
+                            isThreeLine: true,
+                            trailing: _isProf
+                                ? mine
+                                    ? IconButton(
+                                        icon: const Icon(Icons.delete_outline),
+                                        onPressed: () => _deleteOwnSlot(s),
+                                      )
+                                    : null
+                                : ElevatedButton(
+                                    onPressed: open && _canRequestSlots && !bookedByOther
+                                        ? (_email.isNotEmpty
+                                            ? () => _requestSlot(s)
+                                            : null)
+                                        : null,
+                                    child: Text(
+                                      bookedByMe
+                                          ? 'Booked'
+                                          : !open
+                                          ? 'Closed'
+                                          : bookedByOther
+                                              ? 'Booked'
+                                          : _email.isEmpty
+                                              ? 'Log in'
+                                              : 'Book',
+                                    ),
+                                  ),
+                          ),
                         );
                       },
                     ),
@@ -122,11 +464,11 @@ class _CalendarPageState extends State<CalendarPage> {
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
+              child: OutlinedButton(
                 onPressed: () {
-                  Navigator.pushNamed(context, '/book_slot');
+                  Navigator.pushNamed(context, '/prof_slots');
                 },
-                child: const Text("Open detailed slot booking"),
+                child: const Text('Open full professor slots page'),
               ),
             ),
           ],
@@ -158,6 +500,7 @@ class _CalendarPageState extends State<CalendarPage> {
               setState(() {
                 _selectedDay = date;
               });
+              _loadSlotsForSelectedDay();
             },
             child: Container(
               width: 70,
@@ -171,7 +514,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.weekday % 7],
+                    _shortWeekday(date),
                     style: TextStyle(
                       color: isSelected ? Colors.white : Colors.indigo,
                       fontSize: 12,
@@ -195,16 +538,3 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 }
-
-class _DaySlot {
-  final String title;
-  final int startHour;
-  final int endHour;
-
-  _DaySlot({
-    required this.title,
-    required this.startHour,
-    required this.endHour,
-  });
-}
-

@@ -53,7 +53,7 @@ class _ChatListPageState extends State<ChatListPage> {
       final rooms = await _supabase
           .from('chat_rooms')
           .select(
-            'id,name,is_group,type,class_code,max_members,message_start_hour,message_end_hour,office_hours_start,office_hours_end,chat_room_members!inner(user_id)',
+            'id,name,is_group,type,class_code,max_members,message_start_hour,message_end_hour,office_hours_start,office_hours_end,created_by_email,chat_room_members!inner(user_id)',
           )
           .eq('chat_room_members.user_id', userId);
 
@@ -79,11 +79,86 @@ class _ChatListPageState extends State<ChatListPage> {
     }
   }
 
+  Future<String?> _currentProfileId() async {
+    final email = (SessionManager.email ?? '').trim().toLowerCase();
+    if (email.isEmpty) return null;
+    final me = await _supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+    if (me == null) return null;
+    return me['id']?.toString();
+  }
+
+  Future<void> _leaveChat(_ChatItem chat) async {
+    final role = (SessionManager.role ?? '').trim().toLowerCase();
+    final isProf = role == 'prof' || role == 'professor';
+    final email = (SessionManager.email ?? '').trim().toLowerCase();
+    if (email.isEmpty) return;
+
+    final profOwnsRoom =
+        isProf && chat.createdByEmail.trim().toLowerCase() == email;
+    final msg = profOwnsRoom
+        ? 'You are the professor for this room. Leaving will delete the entire chat room for everyone. Continue?'
+        : 'Leave "${chat.name}"?';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave chat'),
+        content: Text(msg),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(profOwnsRoom ? 'Delete room' : 'Leave'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    if (!mounted) return;
+
+    try {
+      final messenger = ScaffoldMessenger.of(context);
+      if (profOwnsRoom) {
+        await _supabase.from('chat_rooms').delete().eq('id', chat.id);
+      } else {
+        final profileId = await _currentProfileId();
+        if (profileId == null) throw Exception('Profile not found');
+        await _supabase
+            .from('chat_room_members')
+            .delete()
+            .eq('room_id', chat.id)
+            .eq('user_id', profileId);
+      }
+      if (!mounted) return;
+      await _loadChats();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            profOwnsRoom
+                ? 'Professor left. Room deleted.'
+                : 'You left the chat room.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not leave chat: $e')),
+      );
+    }
+  }
+
   Future<void> _joinByCode() async {
     final codeCtrl = TextEditingController();
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Join with code'),
         content: TextField(
           controller: codeCtrl,
@@ -96,7 +171,7 @@ class _ChatListPageState extends State<ChatListPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
@@ -138,8 +213,9 @@ class _ChatListPageState extends State<ChatListPage> {
                   'role': 'student',
                 });
                 if (!mounted) return;
-                Navigator.pop(context);
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
                 await _loadChats();
+                if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Joined room')),
                 );
@@ -295,6 +371,7 @@ class _ChatListPageState extends State<ChatListPage> {
                                 currentUserEmail: email,
                                 isGroup: chat.isGroup,
                                 chatType: chat.type,
+                                createdByEmail: chat.createdByEmail,
                                 maxMembers: chat.maxMembers,
                                 messageStartHour: chat.messageStartHour,
                                 messageEndHour: chat.messageEndHour,
@@ -302,8 +379,13 @@ class _ChatListPageState extends State<ChatListPage> {
                                 officeHoursEnd: chat.officeHoursEnd,
                               ),
                             ),
-                          );
+                          ).then((_) => _loadChats());
                         },
+                        trailing: IconButton(
+                          icon: const Icon(Icons.exit_to_app),
+                          tooltip: 'Leave chat',
+                          onPressed: () => _leaveChat(chat),
+                        ),
                       );
                     },
                   ),
@@ -325,6 +407,7 @@ class _ChatItem {
   final int? messageEndHour;
   final DateTime? officeHoursStart;
   final DateTime? officeHoursEnd;
+  final String createdByEmail;
 
   _ChatItem({
     required this.id,
@@ -337,6 +420,7 @@ class _ChatItem {
     this.messageEndHour,
     this.officeHoursStart,
     this.officeHoursEnd,
+    this.createdByEmail = '',
   });
 
   factory _ChatItem.fromMap(Map<String, dynamic> map) {
@@ -361,6 +445,7 @@ class _ChatItem {
       officeHoursEnd: map['office_hours_end'] == null
           ? null
           : DateTime.tryParse(map['office_hours_end'].toString()),
+      createdByEmail: (map['created_by_email'] ?? '').toString(),
     );
   }
 }
