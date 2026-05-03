@@ -36,7 +36,7 @@ class AuthPage extends StatelessWidget {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
                       child: Image.asset(
-                        "assets/logo.jpg",
+                        "assets/logo_new.png",
                         height: 80,
                         fit: BoxFit.cover,
                       ),
